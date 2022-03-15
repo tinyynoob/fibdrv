@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 
+
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
 MODULE_DESCRIPTION("Fibonacci engine driver");
@@ -64,12 +65,17 @@ static ssize_t fib_read(struct file *file,
 }
 
 /* write operation is skipped */
+/* try to measure time within this function */
 static ssize_t fib_write(struct file *file,
                          const char *buf,
                          size_t size,
                          loff_t *offset)
 {
-    return 1;
+    ktime_t kt;
+    kt = ktime_get();
+    fib_sequence(*offset);
+    kt = ktime_sub(ktime_get(), kt);
+    return (ssize_t) ktime_to_ns(kt);
 }
 
 static loff_t fib_device_lseek(struct file *file, loff_t offset, int orig)
@@ -128,7 +134,7 @@ static int __init init_fib_dev(void)
         goto failed_cdev;
     }
     fib_cdev->ops = &fib_fops;
-    rc = cdev_add(fib_cdev, fib_dev, 1);
+    rc = cdev_add(fib_cdev, fib_dev, 1);  // add device to system
 
     if (rc < 0) {
         printk(KERN_ALERT "Failed to add cdev");
