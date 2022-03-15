@@ -159,3 +159,6 @@ timespec
 timeval
 lkmpg
 vla
+swapptr
+bignum
+ubignum
