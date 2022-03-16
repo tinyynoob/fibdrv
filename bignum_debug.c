@@ -6,6 +6,16 @@ int main()
     ubn *a, *b;
     ubignum_init(&a);
     ubignum_init(&b);
+    a->size = 2;
+    b->size = 1;
+    a->data[0] = UINT64_MAX;
+    a->data[1] = UINT64_MAX;
+    b->data[0] = UINT64_MAX;
+    ubn *out1, *out2;
+    ubignum_init(&out1);
+    ubignum_init(&out2);
+    ubignum_add(a, b, &out1);
+    ubignum_add(out2, b, &out2);
 
     ubignum_free(b);
     ubignum_free(a);
