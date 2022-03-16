@@ -19,7 +19,7 @@
 #if defined(__LP64__) || defined(__x86_64__) || defined(__amd64__) || \
     defined(__aarch64__)
 typedef uint64_t ubn_unit;
-typedef unsigned __int128 ubn_unit_extend;  // double length
+typedef __uint128_t ubn_unit_extend;  // double length
 #define ubn_unit_bit 64
 #else
 typedef uint32_t ubn_unit;
@@ -200,7 +200,8 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
                     goto realoc_failed;
             ans->size++;
         }
-        const ubn_unit_extend sum = a->data[i] + b->data[i] + carry;
+        const ubn_unit_extend sum =
+            (ubn_unit_extend) a->data[i] + b->data[i] + carry;
         ans->data[i] = sum;
         carry = sum >> ubn_unit_bit;
     }
@@ -214,7 +215,8 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
             ans->size++;
         }
         if (__builtin_expect(i < remain->size, 1)) {
-            const ubn_unit_extend sum = remain->data[i] + carry;
+            const ubn_unit_extend sum =
+                (ubn_unit_extend) remain->data[i] + carry;
             ans->data[i] = sum;
             carry = sum >> ubn_unit_bit;
         } else {  // the last carry out carries to a new ubn_unit
