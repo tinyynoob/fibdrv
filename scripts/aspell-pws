@@ -162,3 +162,7 @@ vla
 swapptr
 bignum
 ubignum
+ptr
+mult
+ubn
+asm

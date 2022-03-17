@@ -18,7 +18,10 @@ int main()
     out2->size = 1;
     out2->data[0] = UINT64_MAX;
     ubignum_add(out2, b, &out2);
+    ubignum_mult(a, b, &out1);
 
+    ubignum_free(out1);
+    ubignum_free(out2);
     ubignum_free(b);
     ubignum_free(a);
     return 0;
