@@ -166,3 +166,7 @@ ptr
 mult
 ubn
 asm
+sub
+resize
+cmt
+ans

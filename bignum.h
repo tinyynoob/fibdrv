@@ -21,10 +21,12 @@
 typedef uint64_t ubn_unit;
 typedef __uint128_t ubn_unit_extend;  // double length
 #define ubn_unit_bit 64
+#define CPU_64 1
 #else
 typedef uint32_t ubn_unit;
 typedef uint64_t ubn_unit_extend;  // double length
 #define ubn_unit_bit 32
+#define CPU_64 0
 #endif
 
 #ifndef max
@@ -111,38 +113,6 @@ void ubignum_free(ubn *N)
 #endif
 }
 
-static ubn *ubignum_duplicate(ubn *dest, const ubn *src)
-{
-    if (!src)
-        return NULL;
-#if DEBUG
-    dest = (ubn *) malloc(sizeof(ubn));
-#else
-    dest = (ubn *) kmalloc(sizeof(ubn));
-#endif
-    if (!dest)
-        goto struct_aloc_failed;
-    dest->capacity = src->capacity;
-
-#if DEBUG
-    dest->data = (ubn_unit *) malloc(sizeof(ubn_unit) * src->capacity);
-#else
-    dest->data =
-        (ubn_unit *) kmalloc(sizeof(ubn_unit) * src->capacity, GFP_KERNEL);
-#endif
-    if (!dest->data)
-        goto data_aloc_failed;
-    dest->data = (ubn_unit *) memmove(
-        dest->data, src->data,
-        sizeof(ubn_unit) * src->size);  // for both user space and kernel space
-    dest->size = src->size;
-    return dest;
-data_aloc_failed:
-    free(dest);
-struct_aloc_failed:
-    return NULL;
-}
-
 // TODO
 bool ubignum_assign(ubn *N, const char *input)  // may not be a good idea
 {
@@ -154,17 +124,28 @@ bool ubignum_assign(ubn *N, const char *input)  // may not be a good idea
 /* @*N remains unchanged if return false */
 bool ubignum_resize(ubn **N, int new_capacity)
 {
-    if (new_capacity < 0)
+    if (new_capacity < 0) {
         return false;
+    } else if (new_capacity == 0) {
 #if DEBUG
-    ubn *new = (ubn *) realloc((*N)->data, sizeof(ubn_unit) * new_capacity);
+        free((*N)->data);
 #else
-    ubn *new = (ubn *) krealloc((*N)->data, sizeof(ubn_unit) * new_capacity,
-                                GFP_KERNEL);
+        kfree((*N)->data, GFP_KERNEL);
 #endif
-    if (!new)
-        return false;
-    *N = new;
+        (*N)->data = NULL;
+        (*N)->size = 0;
+    } else {
+#if DEBUG
+        ubn_unit *new =
+            (ubn_unit *) realloc((*N)->data, sizeof(ubn_unit) * new_capacity);
+#else
+        ubn_unit *new = (ubn_unit *) krealloc(
+            (*N)->data, sizeof(ubn_unit) * new_capacity, GFP_KERNEL);
+#endif
+        if (!new)
+            return false;
+        (*N)->data = new;
+    }
     (*N)->capacity = new_capacity;
     return true;
 }
@@ -184,8 +165,9 @@ static inline void ubn_unit_add(const ubn_unit a,
 /* (*out) = a + b
  * Aliasing arguments are acceptable.
  * If it return true, the result is put at @out.
- * If return false with alias input, the @out would be unchanged.
- * If return false without alias input, the @out would return neither answer nor
+ * if it return true with alias input, you should free the alias a or b after
+ * call. If return false with alias input, the @out would be unchanged. If
+ * return false without alias input, the @out would return neither answer nor
  * original out.
  */
 bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
@@ -224,10 +206,70 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
         }
         ubn_unit_add(remain->data[i], 0, carry, &ans->data[i], &carry);
     }
-    *out = ans;  // no condition needed
+    *out = ans;
     return true;
 
 realoc_failed:
+    if (alias)
+        ubignum_free(ans);
+    return false;
+}
+
+/* (*out) = a - b
+ * a >= b should be guarantee
+ */
+bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
+{
+    if (!a || !b || !out || !*out)
+        return false;
+    ubn *ans = *out;
+    int alias = 0;
+    if (a == *out)  // pointer aliasing
+        alias ^= 1;
+    if (b == *out)  // pointer aliasing
+        alias ^= 2;
+    if (alias) {  // if alias, allocate space to store the result
+        if (!ubignum_init(&ans))
+            return false;
+    }
+    /* ones' complement of b */
+    ubn *cmt;
+    ubignum_init(&cmt);
+#if DEBUG
+    cmt = (ubn *) malloc(sizeof(ubn));
+#else
+    cmt = (ubn *) kmalloc(sizeof(ubn), GFP_kernel);
+#endif
+    if (!cmt)
+        goto cmt_failed;
+#if DEBUG
+    cmt->data = (ubn_unit *) malloc(sizeof(ubn_unit) * a->size);
+#else
+    cmt->data = (ubn_unit *) kmalloc(sizeof(ubn_unit) * a->size, GFP_KERNEL);
+#endif
+    if (!cmt->data)
+        goto cmt_failed;
+    cmt->capacity = a->size;
+    cmt->size = a->size;
+    for (int i = 0; i < b->size; i++)
+        cmt->data[i] = ~b->data[i];
+    for (int i = b->size; i < a->size; i++)
+        cmt->data[i] = CPU_64 ? UINT64_MAX : UINT32_MAX;
+
+    int carry = 1;
+    for (int i = 0; i < a->size; i++)  // set ans->data
+        ubn_unit_add(a->data[i], cmt->data[i], carry, &ans->data[i], &carry);
+    for (int i = a->size; i; i--) {  // set ans->size
+        if (ans->data[i - 1]) {
+            ans->size = i;
+            break;
+        }
+    }
+    ubignum_free(cmt);
+    *out = ans;
+    return true;
+cmt_failed:
+    ubignum_free(cmt);
     if (alias)
         ubignum_free(ans);
     return false;
@@ -283,10 +325,10 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
         if (!ubignum_init(&ans))
             return false;
     }
-    /* keep mcand longer then mplier */
+    /* keep mcand longer than mplier */
     const ubn *mcand = a->size > b->size ? a : b;
     const ubn *mplier = a->size > b->size ? b : a;
-    ubn *prod;
+    ubn *prod;  // partial product
     if (!ubignum_init(&prod))
         goto prod_aloc_failed;
     if (prod->capacity < mcand->size + 1)
@@ -313,8 +355,7 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
         ubn_unit overlap = 0;
         for (int j = 0; j < mcand->size; j++) {
             ubn_unit low, high;
-#if defined(__LP64__) || defined(__x86_64__) || defined(__amd64__) || \
-    defined(__aarch64__)
+#if CPU_64
             __asm__("mulq %3"
                     : "=a"(low), "=d"(high)
                     : "a"(mcand->data[j]), "rm"(mplier->data[i]));
@@ -334,11 +375,6 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
         if (!ubignum_mult_add(prod, i, &ans))
             goto multadd_failed;
     }
-
-#if DEBUG
-#else
-#endif
-
     *out = ans;
     return true;
 multadd_failed:
