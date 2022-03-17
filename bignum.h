@@ -5,13 +5,11 @@
 
 #define DEFAULT_CAPACITY 16
 
-
 #define DEBUG 1
 
 #if DEBUG
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>  //memmove()
 #else
 #include <linux/compiler.h>
 #endif
@@ -48,7 +46,7 @@ typedef uint64_t ubn_unit_extend;  // double length
 #endif
 
 /* unsigned big number
- * @data: MSB:[size-1], LSB:[0]
+ * @data: MS:[size-1], LS:[0]
  * @size: sizeof(ubn_unit)
  * @capacity: allocated size
  */
@@ -165,9 +163,8 @@ static inline void ubn_unit_add(const ubn_unit a,
 /* (*out) = a + b
  * Aliasing arguments are acceptable.
  * If it return true, the result is put at @out.
- * if it return true with alias input, you should free the alias a or b after
- * call. If return false with alias input, the @out would be unchanged. If
- * return false without alias input, the @out would return neither answer nor
+ * If return false with alias input, the @out would be unchanged.
+ * If return false without alias input, the @out would return neither answer nor
  * original out.
  */
 bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
@@ -206,6 +203,8 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
         }
         ubn_unit_add(remain->data[i], 0, carry, &ans->data[i], &carry);
     }
+    if (alias)
+        ubignum_free(*out);
     *out = ans;
     return true;
 
@@ -266,6 +265,8 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
         }
     }
     ubignum_free(cmt);
+    if (alias)
+        ubignum_free(*out);
     *out = ans;
     return true;
 cmt_failed:
@@ -273,6 +274,16 @@ cmt_failed:
     if (alias)
         ubignum_free(ans);
     return false;
+}
+
+/* developing */
+static bool ubignum_div_ten(const ubn *a, ubn **quo, int *rmd)
+{
+    if (!a || !quo || !*quo || !rmd)
+        return false;
+    // const ubn_unit dvs = 10;  // = 1010_2
+
+    return true;
 }
 
 /* (*out) += a << (offset * ubn_unit_bit)
@@ -375,6 +386,8 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
         if (!ubignum_mult_add(prod, i, &ans))
             goto multadd_failed;
     }
+    if (alias)
+        free(*out);
     *out = ans;
     return true;
 multadd_failed:
