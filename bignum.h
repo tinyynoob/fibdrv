@@ -56,12 +56,6 @@ typedef struct {
     int capacity;
 } ubn;
 
-static inline void swapptr(void **a, void **b)
-{
-    (*a) = (char *) ((__intptr_t)(*a) ^ (__intptr_t)(*b));
-    (*b) = (char *) ((__intptr_t)(*b) ^ (__intptr_t)(*a));
-    (*a) = (char *) ((__intptr_t)(*a) ^ (__intptr_t)(*b));
-}
 
 #if DEBUG
 void ubignum_show(ubn *N) {}
@@ -111,6 +105,16 @@ void ubignum_free(ubn *N)
 #endif
 }
 
+/* set the number to 0 */
+void ubignum_zero(ubn *N)
+{
+    if (!N || !N->capacity)
+        return;
+    for (int i = 0; i < N->size; i++)
+        N->data[i] = 0;
+    N->size = 0;
+}
+
 // TODO
 bool ubignum_assign(ubn *N, const char *input)  // may not be a good idea
 {
@@ -149,9 +153,9 @@ bool ubignum_resize(ubn **N, int new_capacity)
 }
 
 /* */
-inline int ubignum_compare(const ubn *a, const ubn *b)
+int ubignum_compare(const ubn *a, const ubn *b)
 {
-    for (int i = max(a->size, b->size); i >= 0; i--) {
+    for (int i = max(a->size, b->size) - 1; i >= 0; i--) {
         if (a->data[i] > b->data[i])
             return 1;
         else if (a->data[i] < b->data[i])
@@ -165,36 +169,38 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
 {
     if (!a || d < 0 || !out || !*out)
         return false;
-    else if (a->size == 0 || d == 0) {
-        *out = (ubn *) a;
-        return true;
-    }
     ubn *ans = *out;
     int alias = 0;
     if (a == *out)
         alias ^= 1;
     if (alias) {  // if alias, allocate space to store the result
+        if (a->size == 0 || d == 0)
+            return true;
         if (!ubignum_init(&ans))
             return false;
     }
+    ubignum_zero(ans);
     const int chunk_shift = d / ubn_unit_bit;
     const int shift = d % ubn_unit_bit;
     const int new_size = a->size + chunk_shift + 1;
     if (__builtin_expect(new_size > ans->capacity, 0))
-        if (!ubignum_resize(&ans, ans->capacity * 2))
+        if (!ubignum_resize(&ans, new_size))
             goto realoc_failed;
     ans->size = new_size;
 
-    const int oppo_shift =
-        shift ? ubn_unit_bit - shift : 0;  // prevent shift by ubn_unit_bit
     int ai = a->size;
     int oi = ai + chunk_shift;  // = new_size - 1
-    ans->data[oi--] = a->data[ai - 1] >> oppo_shift;
-    for (ai--; ai > 0; ai--)
-        ans->data[oi--] =
-            (a->data[ai] << shift) | (a->data[ai - 1] >> oppo_shift);
-    ans->data[oi--] = a->data[ai] << shift;  // ai is now 0
-    while (oi >= 0)
+    if (shift) {                // copy data from a to ans
+        ans->data[oi--] = a->data[ai - 1] >> ubn_unit_bit - shift;
+        for (ai--; ai > 0; ai--)
+            ans->data[oi--] = (a->data[ai] << shift) |
+                              (a->data[ai - 1] >> ubn_unit_bit - shift);
+        ans->data[oi--] = a->data[ai] << shift;  // ai is now 0
+    } else {
+        for (ai; ai >= 0; ai--)
+            ans->data[oi--] = a->data[ai];
+    }
+    while (oi >= 0)  // set remaining part of ans to 0
         ans->data[oi--] = 0;
     if (ans->data[ans->size - 1] == 0)  // if MS chunk is 0
         ans->size--;
@@ -337,13 +343,75 @@ cmt_failed:
 }
 
 /* developing */
-static bool ubignum_div_ten(const ubn *a, ubn **quo, int *rmd)
+bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
 {
-    if (!a || !quo || !*quo || !rmd)
+    if (!a || !a->size || !quo || !*quo || !rmd)
         return false;
-    // const ubn_unit dvs = 10;  // = 1010_2
+    ubn *ans = *quo;
+    int alias = 0;
+    if (a == *quo)  // pointer aliasing
+        alias ^= 1;
+    if (alias) {  // if alias, allocate space to store the result
+        if (!ubignum_init(&ans))
+            return false;
+    }
+    ubignum_zero(ans);
 
+    ubn *dvd;
+    if (!ubignum_init(&dvd))
+        goto dvd_aloc_failed;
+    if (!ubignum_resize(&dvd, a->capacity))
+        goto dvd_resize_failed;
+    for (int i = 0; i < a->size; i++) {
+        dvd->data[i] = a->data[i];
+        dvd->size++;
+    }
+    ubn *ten;  // const numbers
+    if (!ubignum_init(&ten))
+        goto ten_aloc_failed;
+    ten->data[0] = 10;
+    ten->size = 1;
+
+    ubn *suber;
+    if (!ubignum_init(&suber))
+        goto suber_aloc_failed;
+    if (!ubignum_resize(&suber, dvd->capacity + 1))
+        goto suber_resize_failed;
+
+    int shift = dvd->size * ubn_unit_bit - 3;
+    ubignum_left_shift(ten, shift, &suber);
+    while (ubignum_compare(dvd, ten) > 0) {
+        while (ubignum_compare(dvd, suber) < 0) {
+            shift--;
+            ubignum_left_shift(ten, shift, &suber);
+        }
+        ans->data[shift / ubn_unit_bit] |= (ubn_unit) 1
+                                           << (shift % ubn_unit_bit);
+        ubignum_sub(dvd, suber, &dvd);
+    }
+    ans->size = a->size;
+    if (ans->data[ans->size - 1] == 0)
+        ans->size--;
+    *rmd = (int) dvd->data[0];
+    ubignum_free(ten);
+    ubignum_free(dvd);
+    ubignum_free(suber);
+    if (alias)
+        ubignum_free(*quo);
+    *quo = ans;
     return true;
+
+suber_resize_failed:
+    ubignum_free(suber);
+suber_aloc_failed:
+    ubignum_free(ten);
+ten_aloc_failed:
+dvd_resize_failed:
+    ubignum_free(dvd);
+dvd_aloc_failed:
+    if (alias)
+        ubignum_free(ans);
+    return false;
 }
 
 /* (*out) += a << (offset * ubn_unit_bit)
