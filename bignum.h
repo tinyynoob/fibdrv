@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DEFAULT_CAPACITY 16
+#define DEFAULT_CAPACITY 2
 
 #define DEBUG 1
 
@@ -146,6 +146,66 @@ bool ubignum_resize(ubn **N, int new_capacity)
     }
     (*N)->capacity = new_capacity;
     return true;
+}
+
+/* */
+inline int ubignum_compare(const ubn *a, const ubn *b)
+{
+    for (int i = max(a->size, b->size); i >= 0; i--) {
+        if (a->data[i] > b->data[i])
+            return 1;
+        else if (a->data[i] < b->data[i])
+            return -1;
+    }
+    return 0;
+}
+
+/* left shift a->data by d bit */
+bool ubignum_left_shift(const ubn *a, int d, ubn **out)
+{
+    if (!a || d < 0 || !out || !*out)
+        return false;
+    else if (a->size == 0 || d == 0) {
+        *out = (ubn *) a;
+        return true;
+    }
+    ubn *ans = *out;
+    int alias = 0;
+    if (a == *out)
+        alias ^= 1;
+    if (alias) {  // if alias, allocate space to store the result
+        if (!ubignum_init(&ans))
+            return false;
+    }
+    const int chunk_shift = d / ubn_unit_bit;
+    const int shift = d % ubn_unit_bit;
+    const int new_size = a->size + chunk_shift + 1;
+    if (__builtin_expect(new_size > ans->capacity, 0))
+        if (!ubignum_resize(&ans, ans->capacity * 2))
+            goto realoc_failed;
+    ans->size = new_size;
+
+    const int oppo_shift =
+        shift ? ubn_unit_bit - shift : 0;  // prevent shift by ubn_unit_bit
+    int ai = a->size;
+    int oi = ai + chunk_shift;  // = new_size - 1
+    ans->data[oi--] = a->data[ai - 1] >> oppo_shift;
+    for (ai--; ai > 0; ai--)
+        ans->data[oi--] =
+            (a->data[ai] << shift) | (a->data[ai - 1] >> oppo_shift);
+    ans->data[oi--] = a->data[ai] << shift;  // ai is now 0
+    while (oi >= 0)
+        ans->data[oi--] = 0;
+    if (ans->data[ans->size - 1] == 0)  // if MS chunk is 0
+        ans->size--;
+    if (alias)
+        ubignum_free(*out);
+    *out = ans;
+    return true;
+realoc_failed:
+    if (alias)
+        ubignum_free(ans);
+    return false;
 }
 
 /* no checking, sum and cout input should be guarantee */

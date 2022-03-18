@@ -15,6 +15,7 @@ int main()
     ubignum_init(&out1);
     ubignum_init(&out2);
     ubignum_sub(a, b, &out1);
+    ubignum_left_shift(a, 5, &out2);
 
 
     ubignum_free(out1);
