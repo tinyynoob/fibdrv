@@ -57,10 +57,17 @@ typedef struct {
 } ubn;
 
 
-#if DEBUG
-void ubignum_show(ubn *N) {}
-#endif
+/* set the number to 0 */
+void ubignum_zero(ubn *N)
+{
+    if (!N || !N->capacity)
+        return;
+    for (int i = 0; i < N->capacity; i++)
+        N->data[i] = 0;
+    N->size = 0;
+}
 
+/* Initialize (*N) and set its value to 0 */
 bool ubignum_init(ubn **N)
 {
     if (!N)
@@ -81,8 +88,8 @@ bool ubignum_init(ubn **N)
 #endif
     if (!(*N)->data)
         goto data_aloc_failed;
-    (*N)->size = 0;
     (*N)->capacity = DEFAULT_CAPACITY;
+    ubignum_zero(*N);
     return true;
 
 data_aloc_failed:
@@ -103,16 +110,6 @@ void ubignum_free(ubn *N)
     kfree(N->data);
     kfree(N);
 #endif
-}
-
-/* set the number to 0 */
-void ubignum_zero(ubn *N)
-{
-    if (!N || !N->capacity)
-        return;
-    for (int i = 0; i < N->size; i++)
-        N->data[i] = 0;
-    N->size = 0;
 }
 
 // TODO
@@ -179,7 +176,6 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
         if (!ubignum_init(&ans))
             return false;
     }
-    ubignum_zero(ans);
     const int chunk_shift = d / ubn_unit_bit;
     const int shift = d % ubn_unit_bit;
     const int new_size = a->size + chunk_shift + 1;
@@ -355,7 +351,6 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
         if (!ubignum_init(&ans))
             return false;
     }
-    ubignum_zero(ans);
 
     ubn *dvd;
     if (!ubignum_init(&dvd))
@@ -378,9 +373,10 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
     if (!ubignum_resize(&suber, dvd->capacity + 1))
         goto suber_resize_failed;
 
-    int shift = dvd->size * ubn_unit_bit - 3;
+    ubignum_zero(ans);
+    int shift = dvd->size * ubn_unit_bit - 4;
     ubignum_left_shift(ten, shift, &suber);
-    while (ubignum_compare(dvd, ten) > 0) {
+    while (ubignum_compare(dvd, ten) >= 0) {
         while (ubignum_compare(dvd, suber) < 0) {
             shift--;
             ubignum_left_shift(ten, shift, &suber);
@@ -526,3 +522,66 @@ prod_aloc_failed:
         ubignum_free(ans);
     return false;
 }
+
+/* convert the ubn to ascii string */
+char *ubignum_2decimal(const ubn *N)
+{
+    if (!N)
+        return NULL;
+    ubn *dvd;
+    if (!ubignum_init(&dvd))
+        goto dvd_aloc_failed;
+    if (!ubignum_resize(&dvd, N->size))
+        goto dvd_resize_failed;
+    dvd->size = N->size;
+    for (int i = 0; i < N->size; i++)
+        dvd->data[i] = N->data[i];
+    /* Let n be the number.
+     * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
+     * log_2(10) \approx 3.3219 \approx 7/2
+     */
+    unsigned digit = (ubn_unit_bit / 2 * N->size * 7 / 2) + 1;
+    char *ans = NULL;
+#if DEBUG
+    ans = (char *) calloc(sizeof(char), digit);
+#else
+    ans = (char *) kcalloc(sizeof(char), digit, GFP_KERNEL);
+#endif
+    if (!ans)
+        goto ans_aloc_failed;
+
+    int index = 0;
+    while (dvd->size) {
+        int rmd;
+        if (__builtin_expect(!ubignum_divby_ten(dvd, &dvd, &rmd), 0))
+            goto div_failed;
+        ans[index++] = rmd | '0';
+    }
+    int len = index;
+    /* reverse string */
+    index = len - 1;
+    for (int i = 0; i < index; i++, index--) {
+        char tmp = ans[i];
+        ans[i] = ans[index];
+        ans[index] = tmp;
+    }
+    ubignum_free(dvd);
+    return ans;
+div_failed:
+ans_aloc_failed:
+dvd_resize_failed:
+    ubignum_free(dvd);
+dvd_aloc_failed:
+    return NULL;
+}
+
+#if DEBUG
+void ubignum_show(ubn *N)
+{
+    char *dec = ubignum_2decimal(N);
+    if (!dec)
+        return;
+    printf("%s\n", dec);
+    free(dec);
+}
+#endif
