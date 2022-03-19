@@ -57,7 +57,7 @@ typedef struct {
 } ubn;
 
 
-/* set the number to 0 */
+/* set the number to 0  with size to 0 */
 void ubignum_zero(ubn *N)
 {
     if (!N || !N->capacity)
@@ -112,17 +112,9 @@ void ubignum_free(ubn *N)
 #endif
 }
 
-// TODO
-bool ubignum_assign(ubn *N, const char *input)  // may not be a good idea
-{
-    // '0' = 48
-    if (!N)
-        return false;
-}
-
 /* @*N remains unchanged if return false.
  * set (*N)->data to NULL if new_capacity is 0.
- * No guarantee if new_capacity < (*N)->capacity and is not 0.
+ * No guarantee if new_capacity < (*N)->capacity except for 0.
  */
 bool ubignum_resize(ubn **N, int new_capacity)
 {
@@ -155,7 +147,7 @@ bool ubignum_resize(ubn **N, int new_capacity)
     return true;
 }
 
-/* */
+/* compare two numbers */
 int ubignum_compare(const ubn *a, const ubn *b)
 {
     if (a->size > b->size)
@@ -292,34 +284,13 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
 {
     if (!a || !b || !out || !*out)
         return false;
-    ubn *ans = *out;
-    int alias = 0;
-    if (a == *out)  // pointer aliasing
-        alias ^= 1;
-    if (b == *out)  // pointer aliasing
-        alias ^= 2;
-    if (alias) {  // if alias, allocate space to store the result
-        if (!ubignum_init(&ans))
-            return false;
-    }
     /* ones' complement of b */
     ubn *cmt;
-    ubignum_init(&cmt);
-#if DEBUG
-    cmt = (ubn *) malloc(sizeof(ubn));
-#else
-    cmt = (ubn *) kmalloc(sizeof(ubn), GFP_kernel);
-#endif
-    if (!cmt)
+    if (!ubignum_init(&cmt))
         goto cmt_failed;
-#if DEBUG
-    cmt->data = (ubn_unit *) malloc(sizeof(ubn_unit) * a->size);
-#else
-    cmt->data = (ubn_unit *) kmalloc(sizeof(ubn_unit) * a->size, GFP_KERNEL);
-#endif
-    if (!cmt->data)
-        goto cmt_failed;
-    cmt->capacity = a->size;
+    if (__builtin_expect(cmt->capacity < a->size, 0))
+        if (!ubignum_resize(&cmt, a->size))
+            goto cmt_realoc_failed;
     cmt->size = a->size;
     for (int i = 0; i < b->size; i++)
         cmt->data[i] = ~b->data[i];
@@ -327,23 +298,18 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
         cmt->data[i] = CPU_64 ? UINT64_MAX : UINT32_MAX;
 
     int carry = 1;
-    for (int i = 0; i < a->size; i++)  // set ans->data
-        ubn_unit_add(a->data[i], cmt->data[i], carry, &ans->data[i], &carry);
-    for (int i = a->size; i; i--) {  // set ans->size
-        if (ans->data[i - 1]) {
-            ans->size = i;
-            break;
-        }
-    }
-    ubignum_free(cmt);
-    if (alias)
-        ubignum_free(*out);
-    *out = ans;
+    for (int i = 0; i < a->size; i++)  // compute result and store in cmt
+        ubn_unit_add(a->data[i], cmt->data[i], carry, &cmt->data[i], &carry);
+    // the last carry is discarded
+    for (int i = a->size - 1; i >= 0; i--)
+        if (!cmt->data[i])
+            cmt->size--;
+    ubignum_free(*out);
+    *out = cmt;
     return true;
-cmt_failed:
+cmt_realoc_failed:
     ubignum_free(cmt);
-    if (alias)
-        ubignum_free(ans);
+cmt_failed:
     return false;
 }
 

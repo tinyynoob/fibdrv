@@ -16,7 +16,7 @@ int main()
     ubignum_zero(fib1);
     fib2->size = 1;
     fib2->data[0] = 1;
-    for (int i = 2; i <= 500; i++) {
+    for (int i = 2; i <= 1000; i++) {
         if (!ubignum_add(fib1, fib2, &fib1))
             break;
         printf("%d is\t", i++);
