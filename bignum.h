@@ -120,7 +120,10 @@ bool ubignum_assign(ubn *N, const char *input)  // may not be a good idea
         return false;
 }
 
-/* @*N remains unchanged if return false */
+/* @*N remains unchanged if return false.
+ * set (*N)->data to NULL if new_capacity is 0.
+ * No guarantee if new_capacity < (*N)->capacity and is not 0.
+ */
 bool ubignum_resize(ubn **N, int new_capacity)
 {
     if (new_capacity < 0) {
@@ -145,7 +148,10 @@ bool ubignum_resize(ubn **N, int new_capacity)
             return false;
         (*N)->data = new;
     }
+
     (*N)->capacity = new_capacity;
+    for (int i = (*N)->size; i < (*N)->capacity; i++)
+        (*N)->data[i] = 0;
     return true;
 }
 
@@ -469,6 +475,7 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
     if (prod->capacity < mcand->size + 1)
         if (!ubignum_resize(&prod, mcand->size + 1))
             goto prod_resize_failed;
+    prod->size = mcand->size + 1;
 
     /* The outer loop */
     for (int i = 0; i < mplier->size; i++) {
@@ -505,7 +512,8 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
             overlap = high;
         }
         prod->data[mcand->size] =
-            overlap + (ubn_unit) carry & 2;  // no carry out would be generated
+            overlap +
+            ((ubn_unit) carry & 2);  // no carry out would be generated
 
         if (!ubignum_mult_add(prod, i, &ans))
             goto multadd_failed;
