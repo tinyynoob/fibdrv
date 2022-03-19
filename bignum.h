@@ -158,7 +158,12 @@ bool ubignum_resize(ubn **N, int new_capacity)
 /* */
 int ubignum_compare(const ubn *a, const ubn *b)
 {
-    for (int i = max(a->size, b->size) - 1; i >= 0; i--) {
+    if (a->size > b->size)
+        return 1;
+    else if (a->size < b->size)
+        return -1;
+
+    for (int i = a->size - 1; i >= 0; i--) {
         if (a->data[i] > b->data[i])
             return 1;
         else if (a->data[i] < b->data[i])
@@ -249,34 +254,32 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
         if (!ubignum_init(&ans))
             return false;
     }
+    while (__builtin_expect(ans->capacity < max(a->size, b->size) + 1, 0))
+        if (!ubignum_resize(&ans, ans->capacity * 2))
+            goto ans_realoc_failed;
 
     int i = 0, carry = 0;
     for (i = 0; i < min(a->size, b->size); i++) {
-        if (i >= ans->size) {
-            if (__builtin_expect(i >= ans->capacity, 0))
-                if (!ubignum_resize(&ans, ans->capacity * 2))
-                    goto realoc_failed;
+        if (i >= ans->size)
             ans->size++;
-        }
         ubn_unit_add(a->data[i], b->data[i], carry, &ans->data[i], &carry);
     }
-
     const ubn *remain = (i == a->size) ? b : a;
-    for (; carry || i < remain->size; i++) {
-        if (i >= ans->size) {
-            if (__builtin_expect(i >= ans->capacity, 0))
-                if (!ubignum_resize(&ans, ans->capacity * 2))
-                    goto realoc_failed;
+    for (; i < remain->size; i++) {
+        if (i >= ans->size)
             ans->size++;
-        }
         ubn_unit_add(remain->data[i], 0, carry, &ans->data[i], &carry);
+    }
+    if (carry) {
+        ans->size++;
+        ans->data[remain->size] = 1;
     }
     if (alias)
         ubignum_free(*out);
     *out = ans;
     return true;
 
-realoc_failed:
+ans_realoc_failed:
     if (alias)
         ubignum_free(ans);
     return false;
@@ -357,6 +360,9 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
         if (!ubignum_init(&ans))
             return false;
     }
+    while (__builtin_expect(ans->capacity < a->size, 0))
+        if (!ubignum_resize(&ans, ans->capacity * 2))
+            goto ans_realoc_failed;
 
     ubn *dvd;
     if (!ubignum_init(&dvd))
@@ -379,7 +385,6 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
     if (!ubignum_resize(&suber, dvd->capacity + 1))
         goto suber_resize_failed;
 
-    ubignum_zero(ans);
     int shift = dvd->size * ubn_unit_bit - 4;
     ubignum_left_shift(ten, shift, &suber);
     while (ubignum_compare(dvd, ten) >= 0) {
@@ -411,6 +416,7 @@ ten_aloc_failed:
 dvd_resize_failed:
     ubignum_free(dvd);
 dvd_aloc_failed:
+ans_realoc_failed:
     if (alias)
         ubignum_free(ans);
     return false;
@@ -546,9 +552,9 @@ char *ubignum_2decimal(const ubn *N)
         dvd->data[i] = N->data[i];
     /* Let n be the number.
      * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
-     * log_2(10) \approx 3.3219 \approx 7/2
+     * log_2(10) \approx 3.3219 \approx 7/2, simply choose 3
      */
-    unsigned digit = (ubn_unit_bit / 2 * N->size * 7 / 2) + 1;
+    unsigned digit = (ubn_unit_bit * N->size / 3) + 1;
     char *ans = NULL;
 #if DEBUG
     ans = (char *) calloc(sizeof(char), digit);
