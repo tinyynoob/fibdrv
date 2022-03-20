@@ -18,7 +18,7 @@ $(GIT_HOOKS):
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
-	$(RM) client out
+	$(RM) client out exp
 load:
 	sudo insmod $(TARGET_MODULE).ko
 unload:
@@ -26,6 +26,13 @@ unload:
 
 client: client.c
 	$(CC) -o $@ $^
+
+.PHONY: exp
+exp:
+	$(CC) -o exp exp.c
+	sudo taskset -c 1 ./exp > time.csv
+	gnuplot time_plot.gp
+	
 
 PRINTF = env printf
 PASS_COLOR = \e[32;01m

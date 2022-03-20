@@ -12,7 +12,7 @@ int main()
     long long sz;
     char buf[1000];
     char write_buf[] = "testing writing";
-    int offset = 1000; /* TODO: try test something bigger than the limit */
+    int offset = 1000;
 
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {
