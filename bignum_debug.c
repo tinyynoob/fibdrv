@@ -10,31 +10,27 @@ int main()
     b->size = 1;
     b->data[0] = 1;
 
-    ubn *fib1, *fib2;
-    ubignum_init(&fib1);
-    ubignum_init(&fib2);
-    ubignum_zero(fib1);
-    fib2->size = 1;
-    fib2->data[0] = 1;
-    for (int i = 2; i <= 1000; i++) {
-        if (!ubignum_add(fib1, fib2, &fib1))
-            break;
-        printf("%d is\t", i++);
-        ubignum_show(fib1);
-        if (!ubignum_add(fib1, fib2, &fib2))
-            break;
-        printf("%d is\t", i);
-        ubignum_show(fib2);
+    ubn *fib[2];
+    ubignum_init(&fib[0]);
+    ubignum_init(&fib[1]);
+    ubignum_zero(fib[0]);
+    ubignum_uint(fib[1], 1);
+
+    int index = 0, counter = 0, target = 8;
+    for (; counter < target; counter++, index ^= 1) {
+        ubignum_add(fib[0], fib[1], &fib[index]);
     }
+    printf("index = %d, index^1 = %d\n", index, index ^ 1);
+    printf("%d is\t", counter);
+    ubignum_show(fib[index]);
 
     ubn *ten;
     ubignum_init(&ten);
-    ten->data[0] = 10;
-    ten->size = 1;
+    ubignum_uint(ten, 10);
 
     ubignum_free(ten);
-    ubignum_free(fib1);
-    ubignum_free(fib2);
+    ubignum_free(fib[0]);
+    ubignum_free(fib[1]);
     ubignum_free(b);
     ubignum_free(a);
     return 0;

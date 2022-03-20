@@ -1,17 +1,20 @@
+
+#define DEFAULT_CAPACITY 2
+
+#define DEBUG 0
+
+#if DEBUG
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#define DEFAULT_CAPACITY 2
-
-#define DEBUG 1
-
-#if DEBUG
 #include <stdio.h>
 #include <stdlib.h>
 #else
 #include <linux/compiler.h>
+#include <linux/kernel.h>
+#include <linux/slab.h>
+#include <linux/types.h>
 #endif
 
 #if defined(__LP64__) || defined(__x86_64__) || defined(__amd64__) || \
@@ -56,6 +59,18 @@ typedef struct {
     int capacity;
 } ubn;
 
+void ubignum_free(ubn *N)
+{
+    if (!N)
+        return;
+#if DEBUG
+    free(N->data);
+    free(N);
+#else
+    kfree(N->data);
+    kfree(N);
+#endif
+}
 
 /* set the number to 0  with size to 0 */
 void ubignum_zero(ubn *N)
@@ -93,23 +108,21 @@ bool ubignum_init(ubn **N)
     return true;
 
 data_aloc_failed:
-    free(*N);
+    ubignum_free(*N);
     *N = NULL;
 struct_aloc_failed:
     return false;
 }
 
-void ubignum_free(ubn *N)
+/* assign an unsigned number to N */
+bool ubignum_uint(ubn *N, const unsigned int n)
 {
-    if (!N)
-        return;
-#if DEBUG
-    free(N->data);
-    free(N);
-#else
-    kfree(N->data);
-    kfree(N);
-#endif
+    if (!N || !N->capacity)
+        return false;
+    ubignum_zero(N);
+    N->size = 1;
+    N->data[0] = n;
+    return true;
 }
 
 /* @*N remains unchanged if return false.
@@ -124,7 +137,7 @@ bool ubignum_resize(ubn **N, int new_capacity)
 #if DEBUG
         free((*N)->data);
 #else
-        kfree((*N)->data, GFP_KERNEL);
+        kfree((*N)->data);
 #endif
         (*N)->data = NULL;
         (*N)->size = 0;
@@ -190,13 +203,13 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
     int ai = a->size;
     int oi = ai + chunk_shift;  // = new_size - 1
     if (shift) {                // copy data from a to ans
-        ans->data[oi--] = a->data[ai - 1] >> ubn_unit_bit - shift;
+        ans->data[oi--] = a->data[ai - 1] >> (ubn_unit_bit - shift);
         for (ai--; ai > 0; ai--)
             ans->data[oi--] = (a->data[ai] << shift) |
-                              (a->data[ai - 1] >> ubn_unit_bit - shift);
+                              (a->data[ai - 1] >> (ubn_unit_bit - shift));
         ans->data[oi--] = a->data[ai] << shift;  // ai is now 0
     } else {
-        for (ai; ai >= 0; ai--)
+        for (; ai >= 0; ai--)
             ans->data[oi--] = a->data[ai];
     }
     while (oi >= 0)  // set remaining part of ans to 0
@@ -295,7 +308,7 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
     for (int i = 0; i < b->size; i++)
         cmt->data[i] = ~b->data[i];
     for (int i = b->size; i < a->size; i++)
-        cmt->data[i] = CPU_64 ? UINT64_MAX : UINT32_MAX;
+        cmt->data[i] = CPU_64 ? 0xFFFFFFFFFFFFFFFF : 0xFFFF;
 
     int carry = 1;
     for (int i = 0; i < a->size; i++)  // compute result and store in cmt
@@ -313,7 +326,7 @@ cmt_failed:
     return false;
 }
 
-/* developing */
+/* */
 bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
 {
     if (!a || !a->size || !quo || !*quo || !rmd)
@@ -491,7 +504,7 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
             goto multadd_failed;
     }
     if (alias)
-        free(*out);
+        ubignum_free(*out);
     *out = ans;
     return true;
 multadd_failed:
@@ -508,6 +521,16 @@ char *ubignum_2decimal(const ubn *N)
 {
     if (!N)
         return NULL;
+    if (N->capacity && !N->size) {
+#if DEBUG
+        char *ans = (char *) calloc(sizeof(char), 2);
+#else
+        char *ans = (char *) kcalloc(sizeof(char), 2, GFP_KERNEL);
+#endif
+        ans[0] = '0';
+        ans[1] = 0;
+        return ans;
+    }
     ubn *dvd;
     if (!ubignum_init(&dvd))
         goto dvd_aloc_failed;
@@ -521,11 +544,10 @@ char *ubignum_2decimal(const ubn *N)
      * log_2(10) \approx 3.3219 \approx 7/2, simply choose 3
      */
     unsigned digit = (ubn_unit_bit * N->size / 3) + 1;
-    char *ans = NULL;
 #if DEBUG
-    ans = (char *) calloc(sizeof(char), digit);
+    char *ans = (char *) calloc(sizeof(char), digit);
 #else
-    ans = (char *) kcalloc(sizeof(char), digit, GFP_KERNEL);
+    char *ans = (char *) kcalloc(sizeof(char), digit, GFP_KERNEL);
 #endif
     if (!ans)
         goto ans_aloc_failed;

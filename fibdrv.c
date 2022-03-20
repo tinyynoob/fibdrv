@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 
+#include "bignum.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -18,26 +19,26 @@ MODULE_VERSION("0.1");
 /* MAX_LENGTH is set to 92 because
  * ssize_t can't fit the number > 92
  */
-#define MAX_LENGTH 92
+#define MAX_LENGTH 1000
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 
-static long long fib_sequence(long long k)
+static ubn *fib_sequence(long long k)
 {
-    /* FIXME: C99 variable-length array (VLA) is not allowed in Linux kernel. */
-    long long f[k + 2];
+    ubn *fib[2];
+    ubignum_init(&fib[0]);
+    ubignum_init(&fib[1]);
+    ubignum_zero(fib[0]);
+    ubignum_uint(fib[1], 1);
 
-    f[0] = 0;
-    f[1] = 1;
-
-    for (int i = 2; i <= k; i++) {
-        f[i] = f[i - 1] + f[i - 2];
-    }
-
-    return f[k];
+    int index = 0;
+    for (int counter = 0; counter < k; counter++, index ^= 1)
+        ubignum_add(fib[0], fib[1], &fib[index]);
+    ubignum_free(fib[index ^ 1]);
+    return fib[index];
 }
 
 static int fib_open(struct inode *inode, struct file *file)
@@ -61,7 +62,13 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    return (ssize_t) fib_sequence(*offset);
+    ubn *N = fib_sequence(*offset);
+    char *s = ubignum_2decimal(N);
+    ubignum_free(N);
+    int len = strlen(s) + 1;
+    if (copy_to_user(buf, s, len))
+        return -EFAULT;
+    return (ssize_t) len;
 }
 
 /* write operation is skipped */
@@ -73,8 +80,9 @@ static ssize_t fib_write(struct file *file,
 {
     ktime_t kt;
     kt = ktime_get();
-    fib_sequence(*offset);
+    ubn *N = fib_sequence(*offset);
     kt = ktime_sub(ktime_get(), kt);
+    ubignum_free(N);
     return (ssize_t) ktime_to_ns(kt);
 }
 
