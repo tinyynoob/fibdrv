@@ -31,4 +31,5 @@ client
 out
 exp
 time.csv
-time.png
+*.png
+debug

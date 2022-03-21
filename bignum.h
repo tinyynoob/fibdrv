@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #endif
 
+/* consider x64 and treat others as 32-bit */
 #if defined(__LP64__) || defined(__x86_64__) || defined(__amd64__) || \
     defined(__aarch64__)
 typedef uint64_t ubn_unit;
@@ -125,8 +126,10 @@ bool ubignum_uint(ubn *N, const unsigned int n)
     return true;
 }
 
-/* @*N remains unchanged if return false.
- * set (*N)->data to NULL if new_capacity is 0.
+/*
+ * Adjust capacity of (*N).
+ * If false is returned, (*N) remains unchanged.
+ * Set (*N)->data to NULL if new_capacity is 0.
  * No guarantee if new_capacity < (*N)->capacity except for 0.
  */
 bool ubignum_resize(ubn **N, int new_capacity)
@@ -186,7 +189,7 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
     int alias = 0;
     if (a == *out)
         alias ^= 1;
-    if (alias) {  // if alias, allocate space to store the result
+    if (alias) {
         if (a->size == 0 || d == 0)
             return true;
         if (!ubignum_init(&ans))
@@ -195,7 +198,7 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
     const int chunk_shift = d / ubn_unit_bit;
     const int shift = d % ubn_unit_bit;
     const int new_size = a->size + chunk_shift + 1;
-    if (__builtin_expect(new_size > ans->capacity, 0))
+    if (__builtin_expect(ans->capacity < new_size, 0))
         if (!ubignum_resize(&ans, new_size))
             goto realoc_failed;
     ans->size = new_size;
@@ -240,54 +243,29 @@ static inline void ubn_unit_add(const ubn_unit a,
 
 /* (*out) = a + b
  * Aliasing arguments are acceptable.
- * If it return true, the result is put at @out.
- * If return false with alias input, the @out would be unchanged.
- * If return false without alias input, the @out would return neither answer nor
- * original out.
+ * If false is returned, the values of (*out) remains unchanged.
  */
 bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
 {
     if (!a || !b || !out || !*out)
         return false;
-    ubn *ans = *out;
-    int alias = 0;
-    if (a == *out)  // pointer aliasing
-        alias ^= 1;
-    if (b == *out)  // pointer aliasing
-        alias ^= 2;
-    if (alias) {  // if alias, allocate space to store the result
-        if (!ubignum_init(&ans))
+    while (__builtin_expect((*out)->capacity < max(a->size, b->size) + 1, 0))
+        if (!ubignum_resize(out, (*out)->capacity * 2))
             return false;
-    }
-    while (__builtin_expect(ans->capacity < max(a->size, b->size) + 1, 0))
-        if (!ubignum_resize(&ans, ans->capacity * 2))
-            goto ans_realoc_failed;
-
+    if (*out != a && *out != b)  // if no pointer aliasing
+        ubignum_zero(*out);
     int i = 0, carry = 0;
-    for (i = 0; i < min(a->size, b->size); i++) {
-        if (i >= ans->size)
-            ans->size++;
-        ubn_unit_add(a->data[i], b->data[i], carry, &ans->data[i], &carry);
-    }
-    const ubn *remain = (i == a->size) ? b : a;
-    for (; i < remain->size; i++) {
-        if (i >= ans->size)
-            ans->size++;
-        ubn_unit_add(remain->data[i], 0, carry, &ans->data[i], &carry);
-    }
+    for (i = 0; i < min(a->size, b->size); i++)
+        ubn_unit_add(a->data[i], b->data[i], carry, &(*out)->data[i], &carry);
+    const ubn *const remain = (i == a->size) ? b : a;
+    for (; i < remain->size; i++)
+        ubn_unit_add(remain->data[i], 0, carry, &(*out)->data[i], &carry);
+    (*out)->size = remain->size;
     if (carry) {
-        ans->size++;
-        ans->data[remain->size] = 1;
+        (*out)->data[i] = 1;
+        (*out)->size++;
     }
-    if (alias)
-        ubignum_free(*out);
-    *out = ans;
     return true;
-
-ans_realoc_failed:
-    if (alias)
-        ubignum_free(ans);
-    return false;
 }
 
 /* (*out) = a - b
@@ -308,7 +286,7 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
     for (int i = 0; i < b->size; i++)
         cmt->data[i] = ~b->data[i];
     for (int i = b->size; i < a->size; i++)
-        cmt->data[i] = CPU_64 ? 0xFFFFFFFFFFFFFFFF : 0xFFFF;
+        cmt->data[i] = CPU_64 ? 0xFFFFFFFFFFFFFFFF : 0xFFFFFFFF;
 
     int carry = 1;
     for (int i = 0; i < a->size; i++)  // compute result and store in cmt
