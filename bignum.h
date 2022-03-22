@@ -185,48 +185,46 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
 {
     if (!a || d < 0 || !out || !*out)
         return false;
-    ubn *ans = *out;
-    int alias = 0;
-    if (a == *out)
-        alias ^= 1;
-    if (alias) {
-        if (a->size == 0 || d == 0)
+    else if (d == 0) {
+        if (a == *out)
             return true;
-        if (!ubignum_init(&ans))
-            return false;
+        if (__builtin_expect((*out)->capacity < a->size, 0))
+            if (!ubignum_resize(out, a->size))
+                return false;
+        for (int i = 0; i < a->size; i++)
+            (*out)->data[i] = a->data[i];
+        (*out)->size = a->size;
+        return true;
     }
     const int chunk_shift = d / ubn_unit_bit;
     const int shift = d % ubn_unit_bit;
     const int new_size = a->size + chunk_shift + 1;
-    if (__builtin_expect(ans->capacity < new_size, 0))
-        if (!ubignum_resize(&ans, new_size))
-            goto realoc_failed;
-    ans->size = new_size;
+    if (__builtin_expect((*out)->capacity < new_size, 0))
+        if (!ubignum_resize(out, new_size))
+            return false;
 
-    int ai = a->size;
-    int oi = ai + chunk_shift;  // = new_size - 1
-    if (shift) {                // copy data from a to ans
-        ans->data[oi--] = a->data[ai - 1] >> (ubn_unit_bit - shift);
+    int ai = new_size - chunk_shift - 1;  // note a->size may be changed due to
+                                          // aliasing, should not use a->size
+    int oi = new_size - 1;
+    /* copy data from a to (*out) */
+    if (shift) {
+        (*out)->data[oi--] = a->data[ai - 1] >> (ubn_unit_bit - shift);
         for (ai--; ai > 0; ai--)
-            ans->data[oi--] = (a->data[ai] << shift) |
-                              (a->data[ai - 1] >> (ubn_unit_bit - shift));
-        ans->data[oi--] = a->data[ai] << shift;  // ai is now 0
+            (*out)->data[oi--] = (a->data[ai] << shift) |
+                                 (a->data[ai - 1] >> (ubn_unit_bit - shift));
+        (*out)->data[oi--] = a->data[ai] << shift;  // ai is now 0
     } else {
-        for (; ai >= 0; ai--)
-            ans->data[oi--] = a->data[ai];
+        while (ai >= 0)
+            (*out)->data[oi--] = a->data[ai--];
     }
-    while (oi >= 0)  // set remaining part of ans to 0
-        ans->data[oi--] = 0;
-    if (ans->data[ans->size - 1] == 0)  // if MS chunk is 0
-        ans->size--;
-    if (alias)
-        ubignum_free(*out);
-    *out = ans;
+    /* end copy */
+    while (oi >= 0)  // set remaining part of (*out) to 0
+        (*out)->data[oi--] = 0;
+
+    (*out)->size = new_size;
+    if ((*out)->data[(*out)->size - 1] == 0)  // if MS chunk is 0
+        (*out)->size--;
     return true;
-realoc_failed:
-    if (alias)
-        ubignum_free(ans);
-    return false;
 }
 
 /* no checking, sum and cout input should be guarantee */
@@ -486,21 +484,23 @@ char *ubignum_2decimal(const ubn *N)
 #else
         char *ans = (char *) kcalloc(sizeof(char), 2, GFP_KERNEL);
 #endif
+        if (!ans)
+            return NULL;
         ans[0] = '0';
         ans[1] = 0;
         return ans;
     }
     ubn *dvd;
     if (!ubignum_init(&dvd))
-        goto dvd_aloc_failed;
+        return NULL;
     if (!ubignum_resize(&dvd, N->size))
-        goto dvd_resize_failed;
-    dvd->size = N->size;
+        goto cleanup_dvd;
     for (int i = 0; i < N->size; i++)
         dvd->data[i] = N->data[i];
+    dvd->size = N->size;
     /* Let n be the number.
      * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
-     * log_2(10) \approx 3.3219 \approx 7/2, simply choose 3
+     * log_2(10) \approx 3.3219 \approx 7/2,  we simply choose 3
      */
     unsigned digit = (ubn_unit_bit * N->size / 3) + 1;
 #if DEBUG
@@ -509,13 +509,13 @@ char *ubignum_2decimal(const ubn *N)
     char *ans = (char *) kcalloc(sizeof(char), digit, GFP_KERNEL);
 #endif
     if (!ans)
-        goto ans_aloc_failed;
-
+        goto cleanup_dvd;
+    /* convert 2-base to 10-base */
     int index = 0;
     while (dvd->size) {
         int rmd;
         if (__builtin_expect(!ubignum_divby_ten(dvd, &dvd, &rmd), 0))
-            goto div_failed;
+            goto cleanup_ans;
         ans[index++] = rmd | '0';
     }
     int len = index;
@@ -528,11 +528,14 @@ char *ubignum_2decimal(const ubn *N)
     }
     ubignum_free(dvd);
     return ans;
-div_failed:
-ans_aloc_failed:
-dvd_resize_failed:
+cleanup_ans:
+#if DEBUG
+    free(ans);
+#else
+    kfree(ans);
+#endif
+cleanup_dvd:
     ubignum_free(dvd);
-dvd_aloc_failed:
     return NULL;
 }
 
