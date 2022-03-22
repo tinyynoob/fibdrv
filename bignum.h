@@ -1,7 +1,7 @@
 
 #define DEFAULT_CAPACITY 2
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
 #include <limits.h>
@@ -97,15 +97,15 @@ bool ubignum_init(ubn **N)
         goto struct_aloc_failed;
 
 #if DEBUG
-    (*N)->data = (ubn_unit *) malloc(sizeof(ubn_unit) * DEFAULT_CAPACITY);
+    (*N)->data = (ubn_unit *) calloc(sizeof(ubn_unit), DEFAULT_CAPACITY);
 #else
     (*N)->data =
-        (ubn_unit *) kmalloc(sizeof(ubn_unit) * DEFAULT_CAPACITY, GFP_KERNEL);
+        (ubn_unit *) kcalloc(sizeof(ubn_unit), DEFAULT_CAPACITY, GFP_KERNEL);
 #endif
     if (!(*N)->data)
         goto data_aloc_failed;
     (*N)->capacity = DEFAULT_CAPACITY;
-    ubignum_zero(*N);
+    (*N)->size = 0;
     return true;
 
 data_aloc_failed:
@@ -116,14 +116,14 @@ struct_aloc_failed:
 }
 
 /* assign an unsigned number to N */
-bool ubignum_uint(ubn *N, const unsigned int n)
+void ubignum_uint(ubn *N, const unsigned int n)
 {
     if (!N || !N->capacity)
-        return false;
+        return;
     ubignum_zero(N);
     N->size = 1;
     N->data[0] = n;
-    return true;
+    return;
 }
 
 /*
@@ -269,16 +269,17 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
 }
 
 /* (*out) = a - b
- * a >= b should be guarantee
+ * Since the system is unsigned, a >= b should be guarantee to get a positive
+ * result.
  */
 bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
 {
     if (!a || !b || !out || !*out)
         return false;
     /* ones' complement of b */
-    ubn *cmt;
+    ubn *cmt;  // maybe there is way without memory allocation?
     if (!ubignum_init(&cmt))
-        goto cmt_failed;
+        goto cmt_aloc_failed;
     if (__builtin_expect(cmt->capacity < a->size, 0))
         if (!ubignum_resize(&cmt, a->size))
             goto cmt_realoc_failed;
@@ -300,51 +301,38 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
     return true;
 cmt_realoc_failed:
     ubignum_free(cmt);
-cmt_failed:
+cmt_aloc_failed:
     return false;
 }
 
-/* */
+/* a / 10 = (*quo)...rmd */
 bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
 {
     if (!a || !a->size || !quo || !*quo || !rmd)
         return false;
-    ubn *ans = *quo;
-    int alias = 0;
-    if (a == *quo)  // pointer aliasing
-        alias ^= 1;
-    if (alias) {  // if alias, allocate space to store the result
-        if (!ubignum_init(&ans))
-            return false;
-    }
-    while (__builtin_expect(ans->capacity < a->size, 0))
-        if (!ubignum_resize(&ans, ans->capacity * 2))
-            goto ans_realoc_failed;
-
-    ubn *dvd;
+    ubn *ans, *dvd, *suber, *ten;
+    if (!ubignum_init(&ans))
+        return false;
+    if (!ubignum_resize(&ans, a->size))
+        goto cleanup_ans;
     if (!ubignum_init(&dvd))
-        goto dvd_aloc_failed;
-    if (!ubignum_resize(&dvd, a->capacity))
-        goto dvd_resize_failed;
-    for (int i = 0; i < a->size; i++) {
-        dvd->data[i] = a->data[i];
-        dvd->size++;
-    }
-    ubn *ten;  // const numbers
-    if (!ubignum_init(&ten))
-        goto ten_aloc_failed;
-    ten->data[0] = 10;
-    ten->size = 1;
-
-    ubn *suber;
+        goto cleanup_ans;
+    if (!ubignum_resize(&dvd, a->size))
+        goto cleanup_dvd;
     if (!ubignum_init(&suber))
-        goto suber_aloc_failed;
+        goto cleanup_dvd;
     if (!ubignum_resize(&suber, dvd->capacity + 1))
-        goto suber_resize_failed;
+        goto cleanup_suber;
+    if (!ubignum_init(&ten))
+        goto cleanup_suber;
+    ubignum_uint(ten, 10);
 
-    int shift = dvd->size * ubn_unit_bit - 4;
+    for (int i = 0; i < a->size; i++)
+        dvd->data[i] = a->data[i];
+    dvd->size = a->size;
+    int shift = dvd->size * ubn_unit_bit - 4;  // can be improved by clz()
     ubignum_left_shift(ten, shift, &suber);
-    while (ubignum_compare(dvd, ten) >= 0) {
+    while (ubignum_compare(dvd, ten) >= 0) {  // if dvd >= 10
         while (ubignum_compare(dvd, suber) < 0) {
             shift--;
             ubignum_left_shift(ten, shift, &suber);
@@ -354,28 +342,21 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
         ubignum_sub(dvd, suber, &dvd);
     }
     ans->size = a->size;
-    if (ans->data[ans->size - 1] == 0)
+    if (ans->data[a->size - 1] == 0)
         ans->size--;
     *rmd = (int) dvd->data[0];
     ubignum_free(ten);
-    ubignum_free(dvd);
     ubignum_free(suber);
-    if (alias)
-        ubignum_free(*quo);
+    ubignum_free(dvd);
+    ubignum_free(*quo);
     *quo = ans;
     return true;
-
-suber_resize_failed:
+cleanup_suber:
     ubignum_free(suber);
-suber_aloc_failed:
-    ubignum_free(ten);
-ten_aloc_failed:
-dvd_resize_failed:
+cleanup_dvd:
     ubignum_free(dvd);
-dvd_aloc_failed:
-ans_realoc_failed:
-    if (alias)
-        ubignum_free(ans);
+cleanup_ans:
+    ubignum_free(ans);
     return false;
 }
 

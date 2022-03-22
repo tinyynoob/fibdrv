@@ -16,8 +16,10 @@ int main()
     ubignum_zero(fib[0]);
     ubignum_uint(fib[1], 1);
 
-    int index = 0, counter = 0, target = 10;
+    int index = 0, counter = 0, target = 1000;
     for (; counter < target; counter++, index ^= 1) {
+        printf("%d is\t", counter);
+        ubignum_show(fib[index]);
         ubignum_add(fib[0], fib[1], &fib[index]);
     }
     printf("%d is\t", counter);

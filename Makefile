@@ -33,6 +33,10 @@ exp:
 	sudo taskset -c 1 ./exp > time.csv
 	gnuplot time_plot.gp
 	
+expo2:
+	$(CC) -O2 -o exp exp.c
+	sudo taskset -c 1 ./exp > time.csv
+	gnuplot time_plot.gp
 
 PRINTF = env printf
 PASS_COLOR = \e[32;01m
