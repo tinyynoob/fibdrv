@@ -1,7 +1,7 @@
 
 #define DEFAULT_CAPACITY 2
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
 #include <limits.h>
