@@ -41,6 +41,52 @@ static ubn *fib_sequence(long long k)
     return fib[index];
 }
 
+static ubn *fib_fast(long long k)
+{
+    ubn *fast[5];
+    if (k == 0) {
+        ubignum_init(&fast[0]);
+        ubignum_zero(fast[0]);
+        return fast[0];
+    } else if (k == 1) {
+        ubignum_init(&fast[0]);
+        ubignum_uint(fast[0], 1);
+        return fast[0];
+    }
+
+    for (int i = 0; i < 5; i++)
+        ubignum_init(&fast[i]);
+    ubignum_zero(fast[1]);
+    ubignum_uint(fast[2], 1);
+    int n = 1;
+    for (int currbit = 1 << (32 - __builtin_clzll(k) - 1 - 1); currbit;
+         currbit = currbit >> 1) {
+        /* compute 2n-1 */
+        ubignum_mult(fast[1], fast[1], &fast[0]);
+        ubignum_mult(fast[2], fast[2], &fast[3]);
+        ubignum_add(fast[0], fast[3], &fast[3]);
+        /* compute 2n */
+        ubignum_left_shift(fast[1], 1, &fast[4]);
+        ubignum_add(fast[4], fast[2], &fast[4]);
+        ubignum_mult(fast[4], fast[2], &fast[4]);
+        n *= 2;
+        if (k & currbit) {
+            ubignum_add(fast[3], fast[4], &fast[0]);
+            n++;
+            ubignum_copy(fast[2], fast[0]);
+            ubignum_copy(fast[1], fast[4]);
+        } else {
+            ubignum_copy(fast[2], fast[4]);
+            ubignum_copy(fast[1], fast[3]);
+        }
+    }
+    ubignum_free(fast[0]);
+    ubignum_free(fast[1]);
+    ubignum_free(fast[3]);
+    ubignum_free(fast[4]);
+    return fast[2];
+}
+
 static int fib_open(struct inode *inode, struct file *file)
 {
     if (!mutex_trylock(&fib_mutex)) {
@@ -80,7 +126,14 @@ static ssize_t fib_write(struct file *file,
 {
     ktime_t kt;
     kt = ktime_get();
-    ubn *N = fib_sequence(*offset);
+    ubn *N;  // do not initialize
+    switch (size) {
+    case 0:
+        N = fib_sequence(*offset);
+        break;
+    case 1:
+        N = fib_fast(*offset);
+    }
     kt = ktime_sub(ktime_get(), kt);
     ubignum_free(N);
     return (ssize_t) ktime_to_ns(kt);

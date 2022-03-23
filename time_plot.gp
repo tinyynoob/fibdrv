@@ -11,3 +11,4 @@ set key left
 
 plot \
 "fib.csv" using 1:2 with linespoints linewidth 1 title "fib sequence", \
+"fast.csv" using 1:2 with linespoints linewidth 1 title "fast doubling", \

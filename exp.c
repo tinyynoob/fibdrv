@@ -9,8 +9,9 @@
 
 #define TEST_NUM 1000
 
-int main()
+int main(int argc, char *argv[])
 {
+    const int select = atoi(argv[1]);
     char write_buf[] = "testing writing";
     int offset = 1000;
 
@@ -23,7 +24,7 @@ int main()
         lseek(fd, i, SEEK_SET);
         unsigned long long total = 0;
         for (int j = 0; j < TEST_NUM; j++)
-            total += write(fd, write_buf, strlen(write_buf));
+            total += write(fd, write_buf, select);
         printf("%d,%llu\n", i, total / TEST_NUM);
     }
     close(fd);
