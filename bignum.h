@@ -180,6 +180,21 @@ bool ubignum_resize(ubn **N, int new_capacity)
     return true;
 }
 
+/* Assign src to dest */
+bool ubignum_copy(ubn *dest, const ubn *src)
+{
+    if (!dest || !src)
+        return false;
+    if (dest->capacity < src->size)
+        if (!ubignum_resize(&dest, src->size))
+            return false;
+    ubignum_zero(dest);
+    dest->size = src->size;
+    for (int i = 0; i < src->size; i++)
+        dest->data[i] = src->data[i];
+    return true;
+}
+
 /* compare two numbers */
 int ubignum_compare(const ubn *a, const ubn *b)
 {
@@ -211,6 +226,9 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
         for (int i = 0; i < a->size; i++)
             (*out)->data[i] = a->data[i];
         (*out)->size = a->size;
+        return true;
+    } else if (ubignum_iszero(a)) {
+        ubignum_zero(*out);
         return true;
     }
     const int chunk_shift = d / ubn_unit_bit;
@@ -401,7 +419,7 @@ static void ubignum_mult_add(const ubn *a, int offset, ubn **out)
     for (; carry; oi++)
         ubn_unit_add((*out)->data[oi], 0, carry, &(*out)->data[oi], &carry);
 
-    (*out)->size = max(a->size + offset, (*out)->size) + 1;
+    (*out)->size = max(a->size + offset, (*out)->size);
     for (int i = (*out)->size - 1; !(*out)->data[i]; i--)
         (*out)->size--;
     return;
@@ -470,6 +488,7 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
 
         ubignum_mult_add(pprod, i, &ans);
     }
+    ubignum_free(pprod);
     ubignum_free(*out);
     *out = ans;
     return true;

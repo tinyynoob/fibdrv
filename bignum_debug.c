@@ -9,7 +9,7 @@ int main()
     ubignum_zero(fib[0]);
     ubignum_uint(fib[1], 1);
     ubignum_init(&out);
-    const int target = 1000;
+    const int target = 10000;
     int index = 0, counter = 0;
     for (; counter < target; counter++, index ^= 1) {
         // printf("%d is\t", counter);
@@ -24,37 +24,41 @@ int main()
     // ubignum_mult(fib[index], fib[index ^ 1], &out);
     // ubignum_show(out);
 
-    ubn *fast[target + 1];
-    for (int i = 0; i < target + 1; i++)
+    ubn *fast[5];
+    for (int i = 0; i < 5; i++)
         ubignum_init(&fast[i]);
-    ubignum_uint(fast[0], 0);
-    ubignum_uint(fast[1], 1);
+    ubignum_zero(fast[1]);
+    ubignum_uint(fast[2], 1);
     int n = 1;
-    ubn *tmp;
-    ubignum_init(&tmp);
-    for (int x = 1 << (32 - __builtin_clz(target) - 1 - 1); x; x = x >> 1) {
-        ubignum_mult(fast[n - 1], fast[n - 1], &tmp);
-        ubignum_mult(fast[n], fast[n], &fast[2 * n - 1]);
-        ubignum_add(tmp, fast[2 * n - 1], &fast[2 * n - 1]);
-
-        ubignum_left_shift(fast[n - 1], 1, &fast[2 * n]);
-        ubignum_add(fast[2 * n], fast[n], &fast[2 * n]);
-        ubignum_mult(fast[2 * n], fast[n], &fast[2 * n]);
+    for (int currbit = 1 << (32 - __builtin_clz(target) - 1 - 1); currbit;
+         currbit >>= 1) {
+        /* compute 2n-1 */
+        ubignum_mult(fast[1], fast[1], &fast[0]);
+        ubignum_mult(fast[2], fast[2], &fast[3]);
+        ubignum_add(fast[0], fast[3], &fast[3]);
+        /* compute 2n */
+        ubignum_left_shift(fast[1], 1, &fast[4]);  // * 2
+        ubignum_add(fast[4], fast[2], &fast[4]);
+        ubignum_mult(fast[4], fast[2], &fast[4]);
         n *= 2;
-        printf("%d is\t", n - 1);
-        ubignum_show(fast[n - 1]);
-        printf("%d is\t", n);
-        ubignum_show(fast[n]);
-        if (target & x) {
-            ubignum_add(fast[n - 1], fast[n], &fast[n + 1]);
+        if (target & currbit) {
+            ubignum_add(fast[3], fast[4], &fast[0]);
             n++;
-            printf("%d is\t", n);
-            ubignum_show(fast[n]);
+            ubignum_copy(fast[2], fast[0]);
+            ubignum_copy(fast[1], fast[4]);
+        } else {
+            ubignum_copy(fast[2], fast[4]);
+            ubignum_copy(fast[1], fast[3]);
         }
+        // printf("%d is\t", n - 1);
+        // ubignum_show(fast[1]);
+        // printf("%d is\t", n);
+        // ubignum_show(fast[2]);
     }
+    printf("%d is\t", n);
+    ubignum_show(fast[2]);
 
-    ubignum_free(tmp);
-    for (int i = 0; i < target + 1; i++)
+    for (int i = 0; i < 5; i++)
         ubignum_free(fast[i]);
     ubignum_free(out);
     ubignum_free(fib[0]);
