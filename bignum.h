@@ -1,7 +1,7 @@
 
 #define DEFAULT_CAPACITY 2
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
 #include <limits.h>
@@ -86,6 +86,18 @@ void ubignum_zero(ubn *N)
 bool ubignum_iszero(const ubn *N)
 {
     return N->capacity && !N->size;
+}
+
+/* count leading zero of the MS chunk
+ * DO NOT INPUT ZERO
+ */
+static inline int ubignum_clz(const ubn *N)
+{
+#if CPU_64
+    return __builtin_clzl(N->data[N->size - 1]);
+#else
+    return __builtin_clz(N->data[N->size - 1]);
+#endif
 }
 
 /* Initialize (*N) and set its value to 0 */
@@ -252,10 +264,20 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
 {
     if (!a || !b || !out || !*out)
         return false;
-    while (__builtin_expect((*out)->capacity < max(a->size, b->size) + 1,
-                            0))  // making self bigger
+    /* compute new size */
+    int new_size;
+    if (ubignum_iszero(a) || ubignum_iszero(b))
+        new_size = max(a->size, b->size);
+    else if (a->size >= b->size && ubignum_clz(a) == 0)
+        new_size = a->size + 1;
+    else if (b->size >= a->size && ubignum_clz(b) == 0)
+        new_size = b->size + 1;
+    else
+        new_size = max(a->size, b->size);
+    while (__builtin_expect((*out)->capacity < new_size, 0))
         if (!ubignum_resize(out, (*out)->capacity * 2))
             return false;
+
     if (*out != a && *out != b)  // if no pointer aliasing
         ubignum_zero(*out);
     int i = 0, carry = 0;
@@ -334,13 +356,11 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
     for (int i = 0; i < a->size; i++)
         dvd->data[i] = a->data[i];
     dvd->size = a->size;
-    int shift = dvd->size * ubn_unit_bit - 4;  // can be improved by clz()
-    ubignum_left_shift(ten, shift, &suber);
     while (ubignum_compare(dvd, ten) >= 0) {  // if dvd >= 10
-        while (ubignum_compare(dvd, suber) < 0) {
-            shift--;
-            ubignum_left_shift(ten, shift, &suber);
-        }
+        int shift = dvd->size * ubn_unit_bit - ubignum_clz(dvd) - 4;
+        ubignum_left_shift(ten, shift, &suber);
+        if (ubignum_compare(dvd, suber) < 0)
+            ubignum_left_shift(ten, --shift, &suber);
         ans->data[shift / ubn_unit_bit] |= (ubn_unit) 1
                                            << (shift % ubn_unit_bit);
         ubignum_sub(dvd, suber, &dvd);

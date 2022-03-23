@@ -30,12 +30,12 @@ client: client.c
 .PHONY: exp
 exp:
 	$(CC) -o exp exp.c
-	sudo taskset -c 1 ./exp > time.csv
+	sudo taskset -c 1 ./exp > fib.csv
 	gnuplot time_plot.gp
 	
 expo2:
 	$(CC) -O2 -o exp exp.c
-	sudo taskset -c 1 ./exp > time.csv
+	sudo taskset -c 1 ./exp > fib.csv
 	gnuplot time_plot.gp
 
 PRINTF = env printf

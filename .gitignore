@@ -30,6 +30,6 @@ dkms.conf
 client
 out
 exp
-time.csv
+*.csv
 *.png
 debug

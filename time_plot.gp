@@ -10,4 +10,4 @@ set datafile separator ","
 set key left
 
 plot \
-"time.csv" using 1:2 with linespoints linewidth 1 title "fib sequence", \
+"fib.csv" using 1:2 with linespoints linewidth 1 title "fib sequence", \

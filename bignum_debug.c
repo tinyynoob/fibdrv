@@ -10,7 +10,7 @@ int main()
     ubignum_uint(fib[1], 1);
     ubignum_init(&out);
 
-    int index = 0, counter = 0, target = 1000;
+    int index = 0, counter = 0, target = 10000;
     for (; counter < target; counter++, index ^= 1) {
         // printf("%d is\t", counter);
         // ubignum_show(fib[index]);
