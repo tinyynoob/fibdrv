@@ -12,7 +12,7 @@
 int main()
 {
     char write_buf[] = "testing writing";
-    int offset = 1000;
+    int offset = 3000;
 
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {
@@ -21,10 +21,10 @@ int main()
     }
     for (int i = 0; i < offset; i++) {
         lseek(fd, i, SEEK_SET);
-        long long total = 0;
+        unsigned long long total = 0;
         for (int j = 0; j < TEST_NUM; j++)
             total += write(fd, write_buf, strlen(write_buf));
-        printf("%d,%lld\n", i, total / TEST_NUM);
+        printf("%d,%llu\n", i, total / TEST_NUM);
     }
     close(fd);
     return 0;

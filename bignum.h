@@ -1,7 +1,7 @@
 
 #define DEFAULT_CAPACITY 2
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
 #include <limits.h>
@@ -81,6 +81,11 @@ void ubignum_zero(ubn *N)
     for (int i = 0; i < N->capacity; i++)
         N->data[i] = 0;
     N->size = 0;
+}
+
+bool ubignum_iszero(const ubn *N)
+{
+    return N->capacity && !N->size;
 }
 
 /* Initialize (*N) and set its value to 0 */
@@ -247,7 +252,8 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
 {
     if (!a || !b || !out || !*out)
         return false;
-    while (__builtin_expect((*out)->capacity < max(a->size, b->size) + 1, 0))
+    while (__builtin_expect((*out)->capacity < max(a->size, b->size) + 1,
+                            0))  // making self bigger
         if (!ubignum_resize(out, (*out)->capacity * 2))
             return false;
     if (*out != a && *out != b)  // if no pointer aliasing
@@ -339,7 +345,7 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
                                            << (shift % ubn_unit_bit);
         ubignum_sub(dvd, suber, &dvd);
     }
-    ans->size = a->size;
+    ans->size = a->size;  // FIX: ans = 0 should be considered
     if (ans->data[a->size - 1] == 0)
         ans->size--;
     *rmd = (int) dvd->data[0];
@@ -359,36 +365,26 @@ cleanup_ans:
 }
 
 /* (*out) += a << (offset * ubn_unit_bit)
- *
  * The pointers are assumed no aliasing.
+ * @offset is assumed to be positive or 0.
+ * The capacity of (*out) must be guaranteed in mult(). No resize is done here!
  */
-static bool ubignum_mult_add(const ubn *a, int offset, ubn **out)
+static void ubignum_mult_add(const ubn *a, int offset, ubn **out)
 {
-    if (!a || !out || !*out || offset < 0)
-        return false;
-    if ((*out)->size < offset + a->size) {
-        int new_size = offset + a->size;
-        if (__builtin_expect(new_size >= (*out)->capacity, 0))
-            if (!ubignum_resize(out, new_size + 1))
-                return false;
-        (*out)->size = new_size;
-    }
+    if (ubignum_iszero(a))
+        return;
+
     int carry = 0, oi;
-    for (int ai = 0; ai < a->size; ai++) {
-        oi = ai + offset;
+    for (int ai = 0, oi = offset; ai < a->size; ai++, oi++)
         ubn_unit_add((*out)->data[oi], a->data[ai], carry, &(*out)->data[oi],
                      &carry);
-    }
-    for (; carry; oi++) {
-        if (oi >= (*out)->size) {
-            if (__builtin_expect(oi >= (*out)->capacity, 0))
-                if (!ubignum_resize(out, (*out)->capacity * 2))
-                    return false;
-            (*out)->size++;
-        }
-        (*out)->data[oi] += carry;
-    }
-    return true;
+    for (; carry; oi++)
+        ubn_unit_add((*out)->data[oi], 0, carry, &(*out)->data[oi], &carry);
+
+    (*out)->size = max(a->size + offset, (*out)->size) + 1;
+    for (int i = (*out)->size - 1; !(*out)->data[i]; i--)
+        (*out)->size--;
+    return;
 }
 
 /* (*out) = a * b
@@ -396,44 +392,42 @@ static bool ubignum_mult_add(const ubn *a, int offset, ubn **out)
  */
 bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
 {
-    if (!a || !b || !out || !*out)
+    if (!a || !b || !out || !*out) {
         return false;
-    ubn *ans = *out;
-    int alias = 0;
-    if (a == *out)  // pointer aliasing
-        alias ^= 1;
-    if (b == *out)  // pointer aliasing
-        alias ^= 2;
-    if (alias) {  // if alias, allocate space to store the result
-        if (!ubignum_init(&ans))
-            return false;
+    } else if (ubignum_iszero(a) || ubignum_iszero(b)) {
+        ubignum_zero(*out);
+        return true;
     }
     /* keep mcand longer than mplier */
     const ubn *mcand = a->size > b->size ? a : b;
     const ubn *mplier = a->size > b->size ? b : a;
-    ubn *prod;  // partial product
-    if (!ubignum_init(&prod))
-        goto prod_aloc_failed;
-    if (prod->capacity < mcand->size + 1)
-        if (!ubignum_resize(&prod, mcand->size + 1))
-            goto prod_resize_failed;
-    prod->size = mcand->size + 1;
+    ubn *ans;
+    if (!ubignum_init(&ans))
+        return false;
+    if (!ubignum_resize(&ans, mcand->size + mplier->size))
+        goto cleanup_ans;
+    ubn *pprod;  // partial product
+    if (!ubignum_init(&pprod))
+        goto cleanup_ans;
+    if (!ubignum_resize(&pprod, mcand->size + 1))
+        goto cleanup_pprod;
+    pprod->size = mcand->size + 1;
 
-    /* The outer loop */
+    /* Let a, b, c, d, e, f be chunks.
+     * Suppose that we are going to mult (a, b, c, d) and (e, f).
+     * The outer loop goes from f to e and add the partial products.
+     */
     for (int i = 0; i < mplier->size; i++) {
-        /* The inner loop explanation:
-         *       a b c  = mcand->data[2, 1, 0]
-         *     *     d  = mplier->data[0]
-         *     --------
-         *         c c  = (high, low) denotes result of c * d
-         *       b b
-         *   + a a
-         *   ----------
-         *     x y ? c  sum of bb and cc, it may be carry out to x
-         *   + a a
-         *
-         * let x be recorded in @carry and y be @overlap
-         * no realloc needed for @prod
+        /* The inner loop do (a, b, c, d)*(e) and (a, b, c, d)*(f)
+         *          a   b   c   d
+         *    *                 f
+         * ---------------------------
+         *                 df  df       in the form of (high, low)
+         *             cf  cf
+         *         bf  bf
+         *  +  af  af
+         * ---------------------------
+         *            pprod
          */
         int carry = 0;
         ubn_unit overlap = 0;
@@ -448,28 +442,21 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
                     : "=a"(low), "=d"(high)
                     : "a"(mcand->data[j]), "rm"(mplier->data[i]));
 #endif
-            int cout = 0;
-            ubn_unit_add(low, overlap, carry & 2, &prod->data[j], &cout);
-            carry = (carry << 1) | cout;  // update carry where cout is 0 or 1
-            overlap = high;
+            ubn_unit_add(low, overlap, carry, &pprod->data[j], &carry);
+            overlap = high;  // update overlap
         }
-        prod->data[mcand->size] =
-            overlap +
-            ((ubn_unit) carry & 2);  // no carry out would be generated
+        pprod->data[mcand->size] =
+            overlap + carry;  // no carry out would be generated
 
-        if (!ubignum_mult_add(prod, i, &ans))
-            goto multadd_failed;
+        ubignum_mult_add(pprod, i, &ans);
     }
-    if (alias)
-        ubignum_free(*out);
+    ubignum_free(*out);
     *out = ans;
     return true;
-multadd_failed:
-prod_resize_failed:
-    ubignum_free(prod);
-prod_aloc_failed:
-    if (alias)
-        ubignum_free(ans);
+cleanup_pprod:
+    ubignum_free(pprod);
+cleanup_ans:
+    ubignum_free(ans);
     return false;
 }
 
@@ -478,7 +465,7 @@ char *ubignum_2decimal(const ubn *N)
 {
     if (!N)
         return NULL;
-    if (N->capacity && !N->size) {
+    if (ubignum_iszero(N)) {
 #if DEBUG
         char *ans = (char *) calloc(sizeof(char), 2);
 #else
