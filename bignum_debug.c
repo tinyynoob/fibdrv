@@ -1,15 +1,23 @@
 /* Try to debug in user space */
 #include "bignum.h"
 
+#define FIBSE 0
+#define FAST 1
+
 int main()
 {
-    ubn *fib[2], *out;
+    const int target = 1000;
+    ubn *a = NULL, *b = NULL, *out = NULL;
+    ubignum_init(&out);
+    ubignum_init(&a);
+    ubignum_init(&b);
+
+#if FIBSE
+    ubn *fib[2] = {NULL};
     ubignum_init(&fib[0]);
     ubignum_init(&fib[1]);
     ubignum_zero(fib[0]);
     ubignum_uint(fib[1], 1);
-    ubignum_init(&out);
-    const int target = 10000;
     int index = 0, counter = 0;
     for (; counter < target; counter++, index ^= 1) {
         // printf("%d is\t", counter);
@@ -23,8 +31,12 @@ int main()
     // printf("\n");
     // ubignum_mult(fib[index], fib[index ^ 1], &out);
     // ubignum_show(out);
+    ubignum_free(fib[0]);
+    ubignum_free(fib[1]);
+#endif
 
-    ubn *fast[5];
+#if FAST
+    ubn *fast[5] = {NULL};
     for (int i = 0; i < 5; i++)
         ubignum_init(&fast[i]);
     ubignum_zero(fast[1]);
@@ -57,11 +69,11 @@ int main()
     }
     printf("%d is\t", n);
     ubignum_show(fast[2]);
-
     for (int i = 0; i < 5; i++)
         ubignum_free(fast[i]);
+#endif
     ubignum_free(out);
-    ubignum_free(fib[0]);
-    ubignum_free(fib[1]);
+    ubignum_free(a);
+    ubignum_free(b);
     return 0;
 }

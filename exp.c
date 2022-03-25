@@ -11,9 +11,9 @@
 
 int main(int argc, char *argv[])
 {
+    const int offset = 1000;
     const int select = atoi(argv[1]);
     char write_buf[] = "testing writing";
-    int offset = 1000;
 
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {

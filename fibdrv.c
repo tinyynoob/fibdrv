@@ -28,7 +28,7 @@ static DEFINE_MUTEX(fib_mutex);
 
 static ubn *fib_sequence(long long k)
 {
-    ubn *fib[2];
+    ubn *fib[2] = {NULL};
     ubignum_init(&fib[0]);
     ubignum_init(&fib[1]);
     ubignum_zero(fib[0]);
@@ -43,7 +43,7 @@ static ubn *fib_sequence(long long k)
 
 static ubn *fib_fast(long long k)
 {
-    ubn *fast[5];
+    ubn *fast[5] = {NULL};
     if (k == 0) {
         ubignum_init(&fast[0]);
         ubignum_zero(fast[0]);
@@ -125,16 +125,21 @@ static ssize_t fib_write(struct file *file,
                          loff_t *offset)
 {
     ktime_t kt;
-    kt = ktime_get();
-    ubn *N;  // do not initialize
+    ubn *N = NULL;  // do not initialize
     switch (size) {
     case 0:
+        kt = ktime_get();
         N = fib_sequence(*offset);
+        kt = ktime_sub(ktime_get(), kt);
         break;
     case 1:
+        kt = ktime_get();
         N = fib_fast(*offset);
+        kt = ktime_sub(ktime_get(), kt);
+        break;
+    default:
+        return 0;
     }
-    kt = ktime_sub(ktime_get(), kt);
     ubignum_free(N);
     return (ssize_t) ktime_to_ns(kt);
 }

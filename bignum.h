@@ -1,7 +1,7 @@
 
 #define DEFAULT_CAPACITY 2
 
-#define DEBUG 0
+#define DEBUG 1
 
 #if DEBUG
 #include <limits.h>
@@ -73,7 +73,7 @@ void ubignum_free(ubn *N)
 #endif
 }
 
-/* set the number to 0  with size to 0 */
+/* set the number to 0, that is, size = 0 */
 void ubignum_zero(ubn *N)
 {
     if (!N || !N->capacity)
@@ -83,6 +83,20 @@ void ubignum_zero(ubn *N)
     N->size = 0;
 }
 
+/* assign a unsigned number to N */
+void ubignum_uint(ubn *N, const unsigned int n)
+{
+    if (!N || !N->capacity)
+        return;
+    ubignum_zero(N);
+    if (__builtin_expect(n, 1)) {
+        N->size = 1;
+        N->data[0] = n;
+    }
+    return;
+}
+
+/* check if N is zero */
 bool ubignum_iszero(const ubn *N)
 {
     return N->capacity && !N->size;
@@ -94,7 +108,7 @@ bool ubignum_iszero(const ubn *N)
 static inline int ubignum_clz(const ubn *N)
 {
 #if CPU_64
-    return __builtin_clzl(N->data[N->size - 1]);
+    return __builtin_clzll(N->data[N->size - 1]);
 #else
     return __builtin_clz(N->data[N->size - 1]);
 #endif
@@ -130,17 +144,6 @@ data_aloc_failed:
     *N = NULL;
 struct_aloc_failed:
     return false;
-}
-
-/* assign an unsigned number to N */
-void ubignum_uint(ubn *N, const unsigned int n)
-{
-    if (!N || !N->capacity)
-        return;
-    ubignum_zero(N);
-    N->size = 1;
-    N->data[0] = n;
-    return;
 }
 
 /*
@@ -262,7 +265,7 @@ bool ubignum_left_shift(const ubn *a, int d, ubn **out)
     return true;
 }
 
-/* no checking, sum and cout input should be guarantee */
+/* no checking for parameters */
 static inline void ubn_unit_add(const ubn_unit a,
                                 const ubn_unit b,
                                 const int cin,
@@ -313,7 +316,7 @@ bool ubignum_add(const ubn *a, const ubn *b, ubn **out)
 }
 
 /* (*out) = a - b
- * Since the system is unsigned, a >= b should be guarantee to get a positive
+ * Since the system is unsigned, a >= b should be guaranteed to get a positive
  * result.
  */
 bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
@@ -321,7 +324,7 @@ bool ubignum_sub(const ubn *a, const ubn *b, ubn **out)
     if (!a || !b || !out || !*out)
         return false;
     /* ones' complement of b */
-    ubn *cmt;  // maybe there is way without memory allocation?
+    ubn *cmt = NULL;  // maybe there is way without memory allocation?
     if (!ubignum_init(&cmt))
         goto cmt_aloc_failed;
     if (__builtin_expect(cmt->capacity < a->size, 0))
@@ -352,9 +355,14 @@ cmt_aloc_failed:
 /* a / 10 = (*quo)...rmd */
 bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
 {
-    if (!a || !a->size || !quo || !*quo || !rmd)
+    if (!a || !a->capacity || !quo || !*quo || !rmd)
         return false;
-    ubn *ans, *dvd, *suber, *ten;
+    if (__builtin_expect(ubignum_iszero(a), 0)) {
+        ubignum_zero(*quo);
+        *rmd = 0;
+        return true;
+    }
+    ubn *ans = NULL, *dvd = NULL, *suber = NULL, *ten = NULL;
     if (!ubignum_init(&ans))
         return false;
     if (!ubignum_resize(&ans, a->size))
@@ -383,7 +391,7 @@ bool ubignum_divby_ten(const ubn *a, ubn **quo, int *rmd)
                                            << (shift % ubn_unit_bit);
         ubignum_sub(dvd, suber, &dvd);
     }
-    ans->size = a->size;  // FIX: ans = 0 should be considered
+    ans->size = a->size;
     if (ans->data[a->size - 1] == 0)
         ans->size--;
     *rmd = (int) dvd->data[0];
@@ -439,12 +447,12 @@ bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
     /* keep mcand longer than mplier */
     const ubn *mcand = a->size > b->size ? a : b;
     const ubn *mplier = a->size > b->size ? b : a;
-    ubn *ans;
+    ubn *ans = NULL;
     if (!ubignum_init(&ans))
         return false;
     if (!ubignum_resize(&ans, mcand->size + mplier->size))
         goto cleanup_ans;
-    ubn *pprod;  // partial product
+    ubn *pprod = NULL;  // partial product
     if (!ubignum_init(&pprod))
         goto cleanup_ans;
     if (!ubignum_resize(&pprod, mcand->size + 1))
@@ -516,7 +524,7 @@ char *ubignum_2decimal(const ubn *N)
         ans[1] = 0;
         return ans;
     }
-    ubn *dvd;
+    ubn *dvd = NULL;
     if (!ubignum_init(&dvd))
         return NULL;
     if (!ubignum_resize(&dvd, N->size))
