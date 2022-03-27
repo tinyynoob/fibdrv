@@ -9,7 +9,7 @@ PWD := $(shell pwd)
 
 GIT_HOOKS := .git/hooks/applied
 
-all: $(GIT_HOOKS) client
+all: $(GIT_HOOKS) client exp
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
 $(GIT_HOOKS):
@@ -27,19 +27,9 @@ unload:
 client: client.c
 	$(CC) -o $@ $^
 
-.PHONY: exp
-exp:
+exp: exp.c
 	$(CC) -o exp exp.c
-	sudo taskset -c 1 ./exp 0 > fib.csv
-	sudo taskset -c 1 ./exp 1 > fast.csv
-	gnuplot time_plot.gp
 	
-expo2:
-	$(CC) -O2 -o exp exp.c
-	sudo taskset -c 1 ./exp 0 > fib.csv
-	sudo taskset -c 1 ./exp 1 > fast.csv
-	gnuplot time_plot.gp
-
 PRINTF = env printf
 PASS_COLOR = \e[32;01m
 NO_COLOR = \e[0m

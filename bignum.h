@@ -1,7 +1,7 @@
 
 #define DEFAULT_CAPACITY 2
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG
 #include <limits.h>
@@ -21,12 +21,10 @@
 #if defined(__LP64__) || defined(__x86_64__) || defined(__amd64__) || \
     defined(__aarch64__)
 typedef uint64_t ubn_unit;
-typedef __uint128_t ubn_unit_extend;  // double length
 #define ubn_unit_bit 64
 #define CPU_64 1
 #else
 typedef uint32_t ubn_unit;
-typedef uint64_t ubn_unit_extend;  // double length
 #define ubn_unit_bit 32
 #define CPU_64 0
 #endif
@@ -59,6 +57,14 @@ typedef struct {
     int size;
     int capacity;
 } ubn;
+
+/* swap two ubn */
+void ubignum_swapptr(ubn **a, ubn **b)
+{
+    ubn *tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
 
 void ubignum_free(ubn *N)
 {
@@ -184,10 +190,12 @@ bool ubignum_resize(ubn **N, int new_capacity)
 }
 
 /* Assign src to dest */
-bool ubignum_copy(ubn *dest, const ubn *src)
+bool ubignum_copy(ubn *restrict dest, const ubn *restrict src)
 {
     if (!dest || !src)
         return false;
+    else if (dest == src)
+        return true;
     if (dest->capacity < src->size)
         if (!ubignum_resize(&dest, src->size))
             return false;
@@ -272,9 +280,13 @@ static inline void ubn_unit_add(const ubn_unit a,
                                 ubn_unit *sum,
                                 int *cout)
 {
-    const ubn_unit_extend SUM = (ubn_unit_extend) a + b + cin;
-    *sum = SUM;
-    *cout = SUM >> ubn_unit_bit;
+#if CPU_64
+    *cout = __builtin_uaddll_overflow(a, cin, sum);
+    *cout |= __builtin_uaddll_overflow(*sum, b, sum);
+#else
+    *cout = __builtin_uadd_overflow(a, cin, sum);
+    *cout |= __builtin_uadd_overflow(*sum, b, sum);
+#endif
 }
 
 /* (*out) = a + b
@@ -415,7 +427,9 @@ cleanup_ans:
  * @offset is assumed to be positive or 0.
  * The capacity of (*out) must be guaranteed in mult(). No resize is done here!
  */
-static void ubignum_mult_add(const ubn *a, int offset, ubn **out)
+static void ubignum_mult_add(const ubn *restrict a,
+                             int offset,
+                             ubn *restrict *out)
 {
     if (ubignum_iszero(a))
         return;
@@ -434,7 +448,6 @@ static void ubignum_mult_add(const ubn *a, int offset, ubn **out)
 }
 
 /* (*out) = a * b
- *
  */
 bool ubignum_mult(const ubn *a, const ubn *b, ubn **out)
 {

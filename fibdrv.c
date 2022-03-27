@@ -16,10 +16,7 @@ MODULE_VERSION("0.1");
 
 #define DEV_FIBONACCI_NAME "fibonacci"
 
-/* MAX_LENGTH is set to 92 because
- * ssize_t can't fit the number > 92
- */
-#define MAX_LENGTH 1000
+#define MAX_LENGTH 1000000
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
@@ -73,11 +70,15 @@ static ubn *fib_fast(long long k)
         if (k & currbit) {
             ubignum_add(fast[3], fast[4], &fast[0]);
             n++;
-            ubignum_copy(fast[2], fast[0]);
-            ubignum_copy(fast[1], fast[4]);
+            ubignum_swapptr(&fast[2], &fast[0]);
+            ubignum_swapptr(&fast[1], &fast[4]);
+            // ubignum_copy(fast[2], fast[0]);
+            // ubignum_copy(fast[1], fast[4]);
         } else {
-            ubignum_copy(fast[2], fast[4]);
-            ubignum_copy(fast[1], fast[3]);
+            ubignum_swapptr(&fast[2], &fast[4]);
+            ubignum_swapptr(&fast[1], &fast[3]);
+            // ubignum_copy(fast[2], fast[4]);
+            // ubignum_copy(fast[1], fast[3]);
         }
     }
     ubignum_free(fast[0]);

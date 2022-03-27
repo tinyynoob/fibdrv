@@ -1,4 +1,5 @@
 /* Try to debug in user space */
+#include <time.h>
 #include "bignum.h"
 
 #define FIBSE 0
@@ -6,12 +7,13 @@
 
 int main()
 {
-    const int target = 1000;
+    const int target = 100000;
+    struct timespec t1, t2;
+    unsigned long long consume_time = 0;
     ubn *a = NULL, *b = NULL, *out = NULL;
     ubignum_init(&out);
     ubignum_init(&a);
     ubignum_init(&b);
-
 #if FIBSE
     ubn *fib[2] = {NULL};
     ubignum_init(&fib[0]);
@@ -36,6 +38,7 @@ int main()
 #endif
 
 #if FAST
+    clock_gettime(CLOCK_MONOTONIC, &t1);
     ubn *fast[5] = {NULL};
     for (int i = 0; i < 5; i++)
         ubignum_init(&fast[i]);
@@ -56,22 +59,28 @@ int main()
         if (target & currbit) {
             ubignum_add(fast[3], fast[4], &fast[0]);
             n++;
-            ubignum_copy(fast[2], fast[0]);
-            ubignum_copy(fast[1], fast[4]);
+            ubignum_swapptr(&fast[2], &fast[0]);
+            ubignum_swapptr(&fast[1], &fast[4]);
         } else {
-            ubignum_copy(fast[2], fast[4]);
-            ubignum_copy(fast[1], fast[3]);
+            ubignum_swapptr(&fast[2], &fast[4]);
+            ubignum_swapptr(&fast[1], &fast[3]);
         }
         // printf("%d is\t", n - 1);
         // ubignum_show(fast[1]);
         // printf("%d is\t", n);
         // ubignum_show(fast[2]);
     }
-    printf("%d is\t", n);
+    clock_gettime(CLOCK_MONOTONIC, &t2);
+    consume_time += (unsigned long long) (t2.tv_sec * 1e9 + t2.tv_nsec) -
+                    (t1.tv_sec * 1e9 + t1.tv_nsec);
+    printf("%d consumes time %llu ns.\n", target, consume_time);
+    printf("%d has chunk size %d and its decimal value is\n", target,
+           fast[2]->size);
     ubignum_show(fast[2]);
     for (int i = 0; i < 5; i++)
         ubignum_free(fast[i]);
 #endif
+
     ubignum_free(out);
     ubignum_free(a);
     ubignum_free(b);
