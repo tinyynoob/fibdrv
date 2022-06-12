@@ -41,50 +41,52 @@ static ubn *fib_sequence(long long k)
 static ubn *fib_fast(long long k)
 {
     ubn *fast[5] = {NULL};
+    bool flag = true;
     if (k == 0) {
-        ubignum_init(&fast[0]);
-        ubignum_zero(fast[0]);
-        return fast[0];
+        flag &= ubignum_init(&fast[2]);
+        ubignum_zero(fast[2]);
+        goto end;
     } else if (k == 1) {
-        ubignum_init(&fast[0]);
-        ubignum_uint(fast[0], 1);
-        return fast[0];
+        flag &= ubignum_init(&fast[2]);
+        ubignum_uint(fast[2], 1);
+        goto end;
     }
 
     for (int i = 0; i < 5; i++)
-        ubignum_init(&fast[i]);
+        flag &= ubignum_init(&fast[i]);
     ubignum_zero(fast[1]);
     ubignum_uint(fast[2], 1);
     int n = 1;
     for (int currbit = 1 << (32 - __builtin_clzll(k) - 1 - 1); currbit;
          currbit = currbit >> 1) {
         /* compute 2n-1 */
-        ubignum_mult(fast[1], fast[1], &fast[0]);
-        ubignum_mult(fast[2], fast[2], &fast[3]);
-        ubignum_add(fast[0], fast[3], &fast[3]);
+        flag &= ubignum_square(fast[1], &fast[0]);
+        flag &= ubignum_square(fast[2], &fast[3]);
+        // flag &= ubignum_mult(fast[1], fast[1], &fast[0]);
+        // flag &= ubignum_mult(fast[2], fast[2], &fast[3]);
+        flag &= ubignum_add(fast[0], fast[3], &fast[3]);
         /* compute 2n */
-        ubignum_left_shift(fast[1], 1, &fast[4]);
-        ubignum_add(fast[4], fast[2], &fast[4]);
-        ubignum_mult(fast[4], fast[2], &fast[4]);
+        flag &= ubignum_left_shift(fast[1], 1, &fast[4]);
+        flag &= ubignum_add(fast[4], fast[2], &fast[4]);
+        flag &= ubignum_mult(fast[4], fast[2], &fast[4]);
         n *= 2;
         if (k & currbit) {
-            ubignum_add(fast[3], fast[4], &fast[0]);
+            flag &= ubignum_add(fast[3], fast[4], &fast[0]);
             n++;
             ubignum_swapptr(&fast[2], &fast[0]);
             ubignum_swapptr(&fast[1], &fast[4]);
-            // ubignum_copy(fast[2], fast[0]);
-            // ubignum_copy(fast[1], fast[4]);
         } else {
             ubignum_swapptr(&fast[2], &fast[4]);
             ubignum_swapptr(&fast[1], &fast[3]);
-            // ubignum_copy(fast[2], fast[4]);
-            // ubignum_copy(fast[1], fast[3]);
         }
     }
     ubignum_free(fast[0]);
     ubignum_free(fast[1]);
     ubignum_free(fast[3]);
     ubignum_free(fast[4]);
+end:;
+    if (unlikely(!flag))
+        printk(KERN_INFO "@flag in fast_fib() reports false\n");
     return fast[2];
 }
 

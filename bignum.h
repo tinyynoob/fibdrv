@@ -1,3 +1,5 @@
+#ifndef __BIGNUM_H
+#define __BIGNUM_H
 
 #define DEFAULT_CAPACITY 2
 
@@ -49,7 +51,7 @@ typedef uint32_t ubn_unit;
 
 /* unsigned big number
  * @data: MS:[size-1], LS:[0]
- * @size: sizeof(ubn_unit)
+ * @size: allocated size of @data \div sizeof(ubn_unit)
  * @capacity: allocated size
  */
 typedef struct {
@@ -186,23 +188,6 @@ bool ubignum_resize(ubn **N, int new_capacity)
     (*N)->capacity = new_capacity;
     for (int i = (*N)->size; i < (*N)->capacity; i++)
         (*N)->data[i] = 0;
-    return true;
-}
-
-/* Assign src to dest */
-bool ubignum_copy(ubn *restrict dest, const ubn *restrict src)
-{
-    if (!dest || !src)
-        return false;
-    else if (dest == src)
-        return true;
-    if (dest->capacity < src->size)
-        if (!ubignum_resize(&dest, src->size))
-            return false;
-    ubignum_zero(dest);
-    dest->size = src->size;
-    for (int i = 0; i < src->size; i++)
-        dest->data[i] = src->data[i];
     return true;
 }
 
@@ -520,6 +505,85 @@ cleanup_ans:
     return false;
 }
 
+/* (*out) = a * a */
+bool ubignum_square(const ubn *a, ubn **out)
+{
+    if (!a || !out || !*out) {
+        return false;
+    } else if (ubignum_iszero(a)) {
+        ubignum_zero(*out);
+        return true;
+    }
+    ubn *ans = NULL;
+    if (!ubignum_init(&ans))
+        return false;
+    if (!ubignum_resize(&ans, a->size * 2))
+        goto cleanup_ans;
+    ubn *group = NULL;
+    if (!ubignum_init(&group))
+        goto cleanup_ans;
+    if (!ubignum_resize(&group, a->size + 1 + 1))
+        goto cleanup_group;
+
+    /*                  a   b   c   d
+     *     *            a   b   c   d
+     *    ------------------------------
+     *                 ad  bd  cd  dd
+     *             ac  bc  cc  cd
+     *         ab  bb  bc  bd
+     *     aa  ab  ac  cd
+     *
+     */
+    for (int i = 0; i < a->size; i++) {
+#if CPU_64
+        __asm__("mulq %3"
+                : "=a"(ans->data[2 * i]), "=d"(ans->data[2 * i + 1])
+                : "a"(a->data[i]), "rm"(a->data[i]));
+#else
+        __asm__("mull %3"
+                : "=a"(ans->data[2 * i]), "=d"(ans->data[2 * i + 1])
+                : "a"(a->data[i]), "rm"(a->data[i]));
+#endif
+    }
+    ans->size = ans->data[a->size * 2 - 1] ? a->size * 2 : a->size * 2 - 1;
+
+    for (int i = 0; i < a->size - 1; i++) {
+        int carry = 0;
+        ubn_unit overlap = 0;
+        ubignum_zero(group);
+        for (int j = i + 1; j < a->size; j++) {
+            ubn_unit low, high;
+#if CPU_64
+            __asm__("mulq %3"
+                    : "=a"(low), "=d"(high)
+                    : "a"(a->data[j]), "rm"(a->data[i]));
+#else
+            __asm__("mull %3"
+                    : "=a"(low), "=d"(high)
+                    : "a"(a->data[j]), "rm"(a->data[i]));
+#endif
+            ubn_unit_add(low, overlap, carry, &group->data[j], &carry);
+            overlap = high;  // update overlap
+        }
+        group->data[a->size] =
+            overlap + carry;  // no carry out would be generated
+        group->size = a->size + 1;
+        ubignum_left_shift(group, 1, &group);
+        if (group->data[a->size + 1])
+            group->size++;
+        ubignum_mult_add(group, i, &ans);
+    }
+    ubignum_free(group);
+    ubignum_free(*out);
+    *out = ans;
+    return true;
+cleanup_group:
+    ubignum_free(group);
+cleanup_ans:
+    ubignum_free(ans);
+    return false;
+}
+
 /* convert the ubn to ascii string */
 char *ubignum_2decimal(const ubn *N)
 {
@@ -595,4 +659,6 @@ void ubignum_show(ubn *N)
     printf("%s\n", dec);
     free(dec);
 }
+#endif
+
 #endif
