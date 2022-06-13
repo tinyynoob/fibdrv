@@ -24,11 +24,11 @@ load:
 unload:
 	sudo rmmod $(TARGET_MODULE) || true >/dev/null
 
-client: client.c
-	$(CC) -o $@ $^
+client: client.c bignum.h $(TARGET_MODULE).c
+	$(CC) -o $@ $<
 
-exp: exp.c
-	$(CC) -o exp exp.c
+exp: exp.c bignum.h $(TARGET_MODULE).c
+	$(CC) -o $@ $<
 	
 PRINTF = env printf
 PASS_COLOR = \e[32;01m

@@ -10,7 +10,7 @@
 int main()
 {
     const int offset = 100;
-    char buf[10000];
+    char buf[100000];
     char write_buf[] = "testing writing";
 
     int fd = open(FIB_DEV, O_RDWR);
@@ -22,7 +22,9 @@ int main()
     for (int i = 0; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
         long long t = write(fd, write_buf, 0);
-        printf("Writing to " FIB_DEV ", returned the time %lld (ns)\n", t);
+        printf("Writing to " FIB_DEV
+               " at offset %d, returned the time %lld (ns)\n",
+               i, t);
     }
 
     for (int i = 0; i <= offset; i++) {

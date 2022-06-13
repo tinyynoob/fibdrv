@@ -16,7 +16,7 @@ MODULE_VERSION("0.1");
 
 #define DEV_FIBONACCI_NAME "fibonacci"
 
-#define MAX_LENGTH 1000000
+#define MAX_LENGTH 100000
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
@@ -25,7 +25,7 @@ static DEFINE_MUTEX(fib_mutex);
 
 static ubn *fib_sequence(long long k)
 {
-    ubn *fib[2] = {NULL};
+    ubn *fib[2] = {NULL, NULL};
     ubignum_init(&fib[0]);
     ubignum_init(&fib[1]);
     ubignum_zero(fib[0]);
@@ -127,23 +127,20 @@ static ssize_t fib_write(struct file *file,
                          size_t size,
                          loff_t *offset)
 {
-    ktime_t kt;
     ubn *N = NULL;  // do not initialize
+    ktime_t kt = ktime_get();
     switch (size) {
     case 0:
-        kt = ktime_get();
         N = fib_sequence(*offset);
-        kt = ktime_sub(ktime_get(), kt);
         break;
     case 1:
-        kt = ktime_get();
         N = fib_fast(*offset);
-        kt = ktime_sub(ktime_get(), kt);
         break;
     default:
         return 0;
     }
     ubignum_free(N);
+    kt = ktime_sub(ktime_get(), kt);
     return (ssize_t) ktime_to_ns(kt);
 }
 

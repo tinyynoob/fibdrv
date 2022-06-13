@@ -7,8 +7,9 @@ set output 'time.png'
 #set xtic 1000
 set xtics rotate by 45 right
 set datafile separator ","
-set key left
+set key right
 
 plot \
-"fib.csv" using 1:2 with linespoints linewidth 1 title "fib sequence", \
-"fast.csv" using 1:2 with linespoints linewidth 1 title "fast doubling", \
+"fib.csv" using 1:3 with linespoints linewidth 1 title "user-space consumption time", \
+"fib.csv" using 1:2 with linespoints linewidth 1 title "kernel-space consumption time", \
+"fib.csv" using 1:4 with linespoints linewidth 1 title "diff time", \
