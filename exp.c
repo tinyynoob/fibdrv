@@ -1,14 +1,40 @@
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string.h>  // sprintf
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include "bitwise/sqrt.h"
 
 #define FIB_DEV "/dev/fibonacci"
 
-#define TEST_NUM 200
+#define TEST_NUM 1000
+
+/* Eliminate 5% outliers and compute the average.
+ */
+uint64_t average(int64_t *nums, int numsSize)
+{
+    int64_t mu = 0;
+    for (int i = 0; i < numsSize; i++)
+        mu += nums[i];
+    mu /= numsSize;
+    int64_t deviation = 0;
+    for (int i = 0; i < numsSize; i++)
+        deviation += (nums[i] - mu) * (nums[i] - mu) / numsSize;
+    deviation = sqrt(deviation);
+    for (int i = 0; i < numsSize; i++)
+        if (nums[i] >= mu + 2 * deviation || nums[i] <= mu - 2 * deviation)
+            nums[i] = -1;
+    // printf("%ld, %ld\t", mu, deviation);
+    uint64_t ans = 0;
+    for (int i = 0; i < numsSize; i++)
+        if (nums[i] != -1)
+            ans += nums[i];
+    return ans / (numsSize / 20 * 19);
+}
 
 int main(int argc, char *argv[])
 {
@@ -23,16 +49,22 @@ int main(int argc, char *argv[])
     for (int i = 0; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
         unsigned long long ucons = 0, kcons = 0;
+        int64_t data[TEST_NUM];
+        char name[128];
+        snprintf(name, 128, "data/%d.dat", i);
+        FILE *f = fopen(name, "w");
         for (int j = 0; j < TEST_NUM; j++) {
             struct timespec t1, t2;
             clock_gettime(CLOCK_MONOTONIC, &t1);
-            kcons += write(fd, NULL, select);
+            write(fd, NULL, select);
             clock_gettime(CLOCK_MONOTONIC, &t2);
-            ucons += (unsigned long long) (t2.tv_sec * 1e9 + t2.tv_nsec) -
-                     (t1.tv_sec * 1e9 + t1.tv_nsec);
+            data[j] =
+                (t2.tv_sec * 1e9 + t2.tv_nsec) - (t1.tv_sec * 1e9 + t1.tv_nsec);
+            fprintf(f, "%ld\n", data[j]);
         }
-        printf("%d,%llu,%llu,%llu\n", i, kcons / TEST_NUM, ucons / TEST_NUM,
-               (ucons - kcons) / TEST_NUM);
+        fclose(f);
+        ucons = average(data, TEST_NUM);
+        printf("%d,%llu\n", i, ucons);
     }
     close(fd);
     return 0;

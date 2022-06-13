@@ -111,7 +111,12 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    ubn *N = fib_sequence(*offset);
+    ubn *N = NULL;
+    if (*offset < 400)
+        N = fib_sequence(*offset);
+    else
+        N = fib_fast(*offset);
+
     char *s = ubignum_2decimal(N);
     ubignum_free(N);
     int len = strlen(s) + 1;
@@ -127,21 +132,7 @@ static ssize_t fib_write(struct file *file,
                          size_t size,
                          loff_t *offset)
 {
-    ubn *N = NULL;  // do not initialize
-    ktime_t kt = ktime_get();
-    switch (size) {
-    case 0:
-        N = fib_sequence(*offset);
-        break;
-    case 1:
-        N = fib_fast(*offset);
-        break;
-    default:
-        return 0;
-    }
-    ubignum_free(N);
-    kt = ktime_sub(ktime_get(), kt);
-    return (ssize_t) ktime_to_ns(kt);
+    return 0;
 }
 
 static loff_t fib_device_lseek(struct file *file, loff_t offset, int orig)
