@@ -38,7 +38,7 @@ uint64_t average(int64_t *nums, int numsSize)
 
 int main(int argc, char *argv[])
 {
-    const int offset = 100;
+    const int offset = 500;
     const int select = atoi(argv[1]);
 
     int fd = open(FIB_DEV, O_RDWR);
@@ -49,22 +49,23 @@ int main(int argc, char *argv[])
     for (int i = 0; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
         unsigned long long ucons = 0, kcons = 0;
-        int64_t data[TEST_NUM];
+        int64_t udata[TEST_NUM], kdata[TEST_NUM];
         char name[128];
         snprintf(name, 128, "data/%d.dat", i);
         FILE *f = fopen(name, "w");
         for (int j = 0; j < TEST_NUM; j++) {
             struct timespec t1, t2;
             clock_gettime(CLOCK_MONOTONIC, &t1);
-            write(fd, NULL, select);
+            kdata[j] = write(fd, NULL, select);
             clock_gettime(CLOCK_MONOTONIC, &t2);
-            data[j] =
+            udata[j] =
                 (t2.tv_sec * 1e9 + t2.tv_nsec) - (t1.tv_sec * 1e9 + t1.tv_nsec);
-            fprintf(f, "%ld\n", data[j]);
+            fprintf(f, "%ld\n", kdata[j]);
         }
         fclose(f);
-        ucons = average(data, TEST_NUM);
-        printf("%d,%llu\n", i, ucons);
+        unsigned long long kt = average(kdata, TEST_NUM);
+        unsigned long long ut = average(udata, TEST_NUM);
+        printf("%d,%llu,%llu,%llu\n", i, kt, ut, ut - kt);
     }
     close(fd);
     return 0;
