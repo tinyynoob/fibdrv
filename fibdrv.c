@@ -40,7 +40,7 @@ static ubn *fib_sequence(long long k)
 
 static ubn *fib_fast(long long k)
 {
-    ubn *fast[5] = {NULL};
+    ubn *fast[5] = {NULL, NULL, NULL, NULL, NULL};
     bool flag = true;
     if (k == 0) {
         flag &= ubignum_init(&fast[2]);
@@ -86,7 +86,7 @@ static ubn *fib_fast(long long k)
     ubignum_free(fast[4]);
 end:;
     if (unlikely(!flag))
-        printk(KERN_INFO "@flag in fast_fib() reports false\n");
+        printk(KERN_INFO "@flag in fast_fib() reported false\n");
     return fast[2];
 }
 

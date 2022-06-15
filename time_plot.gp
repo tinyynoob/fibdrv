@@ -10,6 +10,5 @@ set datafile separator ","
 set key left
 
 plot \
-"fib.csv" using 1:3 with linespoints linewidth 1 title "user-space", \
-"fib.csv" using 1:2 with linespoints linewidth 1 title "kernel-space", \
-"fib.csv" using 1:4 with linespoints linewidth 1 title "diff time", \
+"fib.csv" using 1:2 with linespoints linewidth 1 title "fib sequence", \
+"fast.csv" using 1:2 with linespoints linewidth 1 title "fast doubling", \
