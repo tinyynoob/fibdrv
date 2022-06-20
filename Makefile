@@ -1,8 +1,10 @@
 CONFIG_MODULE_SIG = n
-TARGET_MODULE := fibdrv
+TARGET_MODULE := fibdrv_main
 
 obj-m := $(TARGET_MODULE).o
+$(TARGET_MODULE)-y := fibdrv.o ubignum.o
 ccflags-y := -std=gnu99 -Wno-declaration-after-statement
+
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
@@ -25,11 +27,14 @@ unload:
 	sudo rmmod $(TARGET_MODULE) || true >/dev/null
 
 client: client.c
-	$(CC) -o $@ $^
+	$(CC) -o $@ $<
 
 exp: exp.c
-	$(CC) -o exp exp.c
-	
+	$(CC) -o $@ $<
+
+format: *.c *.h
+	clang-format -i $^
+
 PRINTF = env printf
 PASS_COLOR = \e[32;01m
 NO_COLOR = \e[0m
