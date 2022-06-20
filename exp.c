@@ -43,29 +43,27 @@ int main(int argc, char *argv[])
 
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {
-        perror("Failed to open character device");
+        perror("Failed to open " FIB_DEV ".");
         exit(1);
     }
     for (int i = 0; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
-        unsigned long long ucons = 0, kcons = 0;
-        int64_t udata[TEST_NUM], kdata[TEST_NUM];
+        int64_t data[TEST_NUM];
         char name[128];
-        snprintf(name, 128, "data/%d.dat", i);
+        switch (select) {
+        case 0:
+            snprintf(name, 128, "data/seq%d.dat", i);
+            break;
+        case 1:
+            snprintf(name, 128, "data/fast%d.dat", i);
+        }
         FILE *f = fopen(name, "w");
         for (int j = 0; j < TEST_NUM; j++) {
-            struct timespec t1, t2;
-            clock_gettime(CLOCK_MONOTONIC, &t1);
-            kdata[j] = write(fd, NULL, select);
-            clock_gettime(CLOCK_MONOTONIC, &t2);
-            udata[j] =
-                (t2.tv_sec * 1e9 + t2.tv_nsec) - (t1.tv_sec * 1e9 + t1.tv_nsec);
-            fprintf(f, "%ld\n", kdata[j]);
+            data[j] = write(fd, NULL, select);
+            fprintf(f, "%ld\n", data[j]);
         }
         fclose(f);
-        unsigned long long kt = average(kdata, TEST_NUM);
-        unsigned long long ut = average(udata, TEST_NUM);
-        printf("%d,%llu,%llu,%llu\n", i, kt, ut, ut - kt);
+        printf("%d,%lu\n", i, average(data, TEST_NUM));
     }
     close(fd);
     return 0;
