@@ -7,7 +7,8 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 
-#include "bignum.h"
+#include "base.h"
+#include "ubignum.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -23,39 +24,47 @@ static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 
-static ubn *fib_sequence(long long k)
+static ubn_t *fib_sequence(long long k)
 {
-    ubn *fib[2] = {NULL, NULL};
-    ubignum_init(&fib[0]);
-    ubignum_init(&fib[1]);
-    ubignum_zero(fib[0]);
-    ubignum_uint(fib[1], 1);
+    ubn_t *fib[2];
+    bool flag = true;
+    fib[0] = ubignum_init(UBN_DEFAULT_CAPACITY);
+    flag &= !!fib[0];
+    ubignum_set_zero(fib[0]);
+    fib[1] = ubignum_init(UBN_DEFAULT_CAPACITY);
+    flag &= !!fib[1];
+    ubignum_set_u64(fib[1], 1);
 
-    int index = 0;
-    for (int counter = 0; counter < k; counter++, index ^= 1)
-        ubignum_add(fib[0], fib[1], &fib[index]);
-    ubignum_free(fib[index ^ 1]);
-    return fib[index];
+    for (int i = 2; i <= k; i++)
+        flag &= ubignum_add(fib[0], fib[1], &fib[i & 1]);
+    ubignum_free(fib[(k & 1) ^ 1]);
+    if (unlikely(!flag))
+        printk(KERN_INFO "@flag in fib_sequence() reported false\n");
+    return fib[k & 1];
 }
 
-static ubn *fib_fast(long long k)
+static ubn_t *fib_fast(long long k)
 {
-    ubn *fast[5] = {NULL, NULL, NULL, NULL, NULL};
+    ubn_t *fast[5];
     bool flag = true;
     if (k == 0) {
-        flag &= ubignum_init(&fast[2]);
-        ubignum_zero(fast[2]);
+        fast[2] = ubignum_init(UBN_DEFAULT_CAPACITY);
+        flag &= !!fast[2];
+        ubignum_set_zero(fast[2]);
         goto end;
     } else if (k == 1) {
-        flag &= ubignum_init(&fast[2]);
-        ubignum_uint(fast[2], 1);
+        fast[2] = ubignum_init(UBN_DEFAULT_CAPACITY);
+        flag &= !!fast[2];
+        ubignum_set_u64(fast[2], 1);
         goto end;
     }
 
-    for (int i = 0; i < 5; i++)
-        flag &= ubignum_init(&fast[i]);
-    ubignum_zero(fast[1]);
-    ubignum_uint(fast[2], 1);
+    for (int i = 0; i < 5; i++) {
+        fast[i] = ubignum_init(UBN_DEFAULT_CAPACITY);
+        flag &= !!fast[i];
+    }
+    ubignum_set_zero(fast[1]);
+    ubignum_set_u64(fast[2], 1);
     int n = 1;
     for (int currbit = 1 << (32 - __builtin_clzll(k) - 1 - 1); currbit;
          currbit = currbit >> 1) {
@@ -86,7 +95,7 @@ static ubn *fib_fast(long long k)
     ubignum_free(fast[4]);
 end:;
     if (unlikely(!flag))
-        printk(KERN_INFO "@flag in fast_fib() reported false\n");
+        printk(KERN_INFO "@flag in fib_fast() reported false\n");
     return fast[2];
 }
 
@@ -111,12 +120,13 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    ubn *N = fib_sequence(*offset);
+    ubn_t *N = fib_sequence(*offset);
     char *s = ubignum_2decimal(N);
     ubignum_free(N);
     int len = strlen(s) + 1;
     if (copy_to_user(buf, s, len))
         return -EFAULT;
+    kfree(s);
     return (ssize_t) len;
 }
 
@@ -127,7 +137,7 @@ static ssize_t fib_write(struct file *file,
                          size_t size,
                          loff_t *offset)
 {
-    ubn *N = NULL;  // do not initialize
+    ubn_t *N = NULL;  // do not initialize
     ktime_t kt = ktime_get();
     switch (size) {
     case 0:
