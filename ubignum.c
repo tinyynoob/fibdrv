@@ -64,8 +64,8 @@ static inline int ubignum_clz(const ubn_t *N)
  */
 ubn_t *ubignum_init(uint16_t capacity)
 {
-    ubn_t *N;
-    if (unlikely(!(N = (ubn_t *) MALLOC(sizeof(ubn_unit_t)))))
+    ubn_t *N = (ubn_t *) MALLOC(sizeof(ubn_t));
+    if (unlikely(!N))
         goto struct_aloc_failed;
     if (unlikely(
             !(N->data = (ubn_unit_t *) CALLOC(sizeof(ubn_unit_t), capacity))))
@@ -96,11 +96,14 @@ bool ubignum_recap(ubn_t *N, uint16_t new_capacity)
     } else {
         ubn_unit_t *new =
             (ubn_unit_t *) REALLOC(N->data, sizeof(ubn_unit_t) * new_capacity);
-        if (unlikely(!new))
+        if (unlikely(!new)) {
+            FREE(new);
             return false;
+        }
         N->data = new;
-        memset(N->data + N->size, 0,
-               (new_capacity - N->size) * sizeof(ubn_unit_t));
+        if (new_capacity >= N->size)
+            memset(N->data + N->size, 0,
+                   (new_capacity - N->size) * sizeof(ubn_unit_t));
         N->capacity = new_capacity;
         N->size = MIN(N->size, N->capacity);
         return true;
@@ -147,33 +150,28 @@ bool ubignum_left_shift(const ubn_t *a, uint16_t d, ubn_t **out)
 
     const uint16_t chunk_shift = d / UBN_UNIT_BIT;
     const uint16_t shift = d % UBN_UNIT_BIT;
-    const uint16_t new_size = a->size + chunk_shift + 1;
-    a->size + chunk_shift + 1;
+    const uint16_t new_size = a->size + chunk_shift + (shift > ubignum_clz(a));
     if ((*out)->capacity < new_size)
         if (unlikely(!ubignum_recap(*out, new_size)))
             return false;
+    (*out)->size = new_size;
 
-    int ai = new_size - chunk_shift - 1;  // note a->size may be changed due to
-                                          // aliasing, should not use a->size
-    int oi = new_size - 1;
+    memset((*out)->data, 0, chunk_shift * sizeof(ubn_unit_t));
     /* copy data from a to (*out) */
     if (shift) {
-        (*out)->data[oi--] = a->data[ai - 1] >> (UBN_UNIT_BIT - shift);
-        for (ai--; ai > 0; ai--)
-            (*out)->data[oi--] = a->data[ai] << shift |
+        int ai = 0, oi = chunk_shift;
+        // merge the lower part from [ai] and the higher part from [ai - 1]
+        (*out)->data[oi++] = a->data[ai++] << shift;
+        for (; ai < a->size; ai++)
+            (*out)->data[oi++] = a->data[ai] << shift |
                                  a->data[ai - 1] >> (UBN_UNIT_BIT - shift);
-        (*out)->data[oi--] = a->data[ai] << shift;  // ai is now 0
+        if (oi < new_size)
+            (*out)->data[oi] = a->data[ai - 1] >> (UBN_UNIT_BIT - shift);
     } else {
-        while (ai >= 0)
-            (*out)->data[oi--] = a->data[ai--];
+        memmove((*out)->data + chunk_shift, a->data,
+                a->size * sizeof(ubn_unit_t));
     }
     /* end copy */
-    while (oi >= 0)  // set remaining part of (*out) to 0
-        (*out)->data[oi--] = 0;
-
-    (*out)->size = new_size;
-    if ((*out)->data[(*out)->size - 1] == 0)  // if MS chunk is 0
-        (*out)->size--;
     return true;
 }
 
@@ -259,24 +257,17 @@ bool ubignum_divby_ten(const ubn_t *a, ubn_t **quo, int *rmd)
         return true;
     }
     ubn_t *ans = NULL, *dvd = NULL, *suber = NULL, *ten = NULL;
-    if (!(ans = ubignum_init(UBN_DEFAULT_CAPACITY)))
+    if (unlikely(!(ans = ubignum_init(a->size))))
         return false;
-    if (!ubignum_recap(ans, a->size))
+    if (unlikely(!(dvd = ubignum_init(a->size))))
         goto cleanup_ans;
-    if (!(dvd = ubignum_init(UBN_DEFAULT_CAPACITY)))
-        goto cleanup_ans;
-    if (!ubignum_recap(dvd, a->size))
+    if (unlikely(!(suber = ubignum_init(dvd->capacity + 1))))
         goto cleanup_dvd;
-    if (!(suber = ubignum_init(UBN_DEFAULT_CAPACITY)))
-        goto cleanup_dvd;
-    if (!ubignum_recap(suber, dvd->capacity + 1))
-        goto cleanup_suber;
-    if (!(ten = ubignum_init(1)))
+    if (unlikely(!(ten = ubignum_init(1))))
         goto cleanup_suber;
     ubignum_set_u64(ten, 10);
 
-    for (int i = 0; i < a->size; i++)
-        dvd->data[i] = a->data[i];
+    memcpy(dvd->data, a->data, a->size * sizeof(ubn_unit_t));
     dvd->size = a->size;
     while (ubignum_compare(dvd, ten) >= 0) {  // if dvd >= 10
         uint16_t shift = dvd->size * UBN_UNIT_BIT - ubignum_clz(dvd) - 4;
