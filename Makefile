@@ -20,7 +20,7 @@ $(GIT_HOOKS):
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
-	$(RM) client out exp
+	$(RM) client out exp userspace_elf
 load:
 	sudo insmod $(TARGET_MODULE).ko
 unload:
@@ -34,6 +34,9 @@ exp: exp.c
 
 format: *.c *.h
 	clang-format -i $^
+
+userspace: bignum_debug.c ubignum.c
+	$(CC) $^ -o userspace_elf -g
 
 PRINTF = env printf
 PASS_COLOR = \e[32;01m

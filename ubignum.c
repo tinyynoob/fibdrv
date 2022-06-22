@@ -307,8 +307,8 @@ static void ubignum_mult_add(const ubn_t *restrict a,
     if (ubignum_iszero(a))
         return;
 
-    int carry = 0, oi;
-    for (int ai = 0, oi = offset; ai < a->size; ai++, oi++)
+    int carry = 0, oi = offset;
+    for (int ai = 0; ai < a->size; ai++, oi++)
         carry = ubn_unit_add((*out)->data[oi], a->data[ai], carry,
                              &(*out)->data[oi]);
     for (; carry; oi++)
@@ -388,42 +388,45 @@ bool ubignum_square(const ubn_t *a, ubn_t **out)
     ubn_t *ans = ubignum_init(a->size * 2);
     if (unlikely(!ans))
         return false;
-    ubn_t *group = ubignum_init(a->size + 1 + 1);
-    if (unlikely(!group))
+    ubn_t *dprod = ubignum_init(a->size + 1 + 1);
+    if (unlikely(!dprod))
         goto cleanup_ans;
 
     /*                  a   b   c   d
      *     *            a   b   c   d
      *    ------------------------------
-     *                 ad  bd  cd  dd
-     *             ac  bc  cc  cd
-     *         ab  bb  bc  bd
-     *     aa  ab  ac  cd
+     *                 ad  bd  cd  dd       @dprod is (ad bd cd 0)
+     *             ac  bc  cc  cd                     (ac bc  0 0)
+     *         ab  bb  bc  bd                         (ab  0  0 0)
+     *     aa  ab  ac  ad
      *
+     * Don't be messed by the sketch.
+     * The entries usually have overlap, since multiplication doubles the
+     * length. For exmaple, the dd occupies the two rightmost chunks.
      */
+    // compute aa, bb, cc, dd parts
     for (int i = 0; i < a->size; i++)
         ubn_unit_mult(a->data[i], a->data[i], ans->data[2 * i + 1],
                       ans->data[2 * i]);
     ans->size = ans->data[a->size * 2 - 1] ? a->size * 2 : a->size * 2 - 1;
+    // compute multiplications of different chunks
     for (int i = 0; i < a->size - 1; i++) {
         int carry = 0;
         ubn_unit_t overlap = 0;
-        ubignum_set_zero(group);
+        ubignum_set_zero(dprod);
         for (int j = i + 1; j < a->size; j++) {
             ubn_unit_t low, high;
             ubn_unit_mult(a->data[j], a->data[i], high, low);
-            carry = ubn_unit_add(low, overlap, carry, &group->data[j]);
+            carry = ubn_unit_add(low, overlap, carry, &dprod->data[j]);
             overlap = high;  // update overlap
         }
-        group->data[a->size] =
-            overlap + carry;  // no carry out would be generated
-        group->size = a->size + 1;
-        ubignum_left_shift(group, 1, &group);
-        if (group->data[a->size + 1])
-            group->size++;
-        ubignum_mult_add(group, i, &ans);
+        dprod->data[a->size] =
+            overlap + carry;  // no carry-out would be generated
+        dprod->size = dprod->data[a->size] ? a->size + 1 : a->size;
+        ubignum_left_shift(dprod, 1, &dprod);  // * 2
+        ubignum_mult_add(dprod, i, &ans);
     }
-    ubignum_free(group);
+    ubignum_free(dprod);
     ubignum_free(*out);
     *out = ans;
     return true;
