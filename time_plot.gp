@@ -1,5 +1,5 @@
 reset                                                                           
-set xlabel 'n'
+set xlabel 'length of the string copied'
 set ylabel 'average time (ns)'
 set title 'time measurement'
 set term png enhanced font 'Times_New_Roman, 10'
@@ -10,5 +10,4 @@ set datafile separator ","
 set key left
 
 plot \
-"fib.csv" using 1:2 with linespoints linewidth 1 title "fib sequence", \
-"fast.csv" using 1:2 with linespoints linewidth 1 title "fast doubling", \
+"fast.csv" using 1:2 with linespoints linewidth 1 title "copy-to-user consumption", \

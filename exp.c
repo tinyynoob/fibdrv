@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <string.h>  // sprintf
+#include <string.h>  // snprintf
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -38,15 +38,16 @@ uint64_t average(int64_t *nums, int numsSize)
 
 int main(int argc, char *argv[])
 {
-    const int offset = 500;
+    const int offset = 100000;
     const int select = atoi(argv[1]);
+    char buf[200000];
 
     int fd = open(FIB_DEV, O_RDWR);
     if (fd < 0) {
         perror("Failed to open " FIB_DEV ".");
         exit(1);
     }
-    for (int i = 0; i <= offset; i++) {
+    for (int i = 100; i <= offset; i += 100) {
         lseek(fd, i, SEEK_SET);
         int64_t data[TEST_NUM];
         char name[128];
@@ -59,7 +60,7 @@ int main(int argc, char *argv[])
         }
         FILE *f = fopen(name, "w");
         for (int j = 0; j < TEST_NUM; j++) {
-            data[j] = write(fd, NULL, select);
+            data[j] = read(fd, buf, select);
             fprintf(f, "%ld\n", data[j]);
         }
         fclose(f);
