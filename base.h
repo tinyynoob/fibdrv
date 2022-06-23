@@ -2,7 +2,7 @@
 #define __BASE_H
 
 #ifndef KSPACE
-#define KSPACE 0  // run in kernel space or user space
+#define KSPACE 1  // run in kernel space or user space
 #endif
 
 #if KSPACE
