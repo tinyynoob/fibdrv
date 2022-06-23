@@ -1,5 +1,6 @@
 /* Try to debug in user space */
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include "base.h"
 #include "ubignum.h"
@@ -10,7 +11,7 @@
 static inline void ubignum_show(const ubn_t *N)
 {
     char *s = ubignum_2decimal(N);
-    puts(s);
+    printf("%u\n", (unsigned) strlen(s));
     free(s);
 }
 
@@ -29,7 +30,6 @@ static ubn_t *fib_fast(uint32_t k)
 
     for (int i = 0; i < 5; i++) {
         fast[i] = ubignum_init(UBN_DEFAULT_CAPACITY);
-        flag &= !!fast[i];
     }
     ubignum_set_zero(fast[1]);
     ubignum_set_u64(fast[2], 1);
@@ -68,7 +68,7 @@ end:;
 
 int main()
 {
-    const int target = 1000;
+    const int target = 10000;
     ubn_t *a = NULL, *b = NULL, *out = NULL;
     out = ubignum_init(UBN_DEFAULT_CAPACITY);
     a = ubignum_init(UBN_DEFAULT_CAPACITY);
@@ -89,9 +89,9 @@ int main()
 #endif
 
 #if FAST
-    for (int i = 0; i <= target; i++) {
+    for (int i = 0; i <= target; i += 10) {
         ubn_t *v = fib_fast(i);
-        printf("%d is\t", i);
+        printf("%d,", i);
         ubignum_show(v);
         ubignum_free(v);
     }
