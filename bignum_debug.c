@@ -27,10 +27,8 @@ static ubn_t *fib_fast(uint32_t k)
         goto end;
     }
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 5; i++)
         fast[i] = ubignum_init(UBN_DEFAULT_CAPACITY);
-        flag &= !!fast[i];
-    }
     ubignum_set_zero(fast[1]);
     ubignum_set_u64(fast[2], 1);
     int n = 1;
