@@ -6,13 +6,68 @@
 #include "ubignum.h"
 
 #define FIBSE 0
-#define FAST 1
+#define FAST 0
+#define COMPARE 1
 
 static inline void ubignum_show(const ubn_t *N)
 {
     char *s = ubignum_2decimal(N);
     printf("%u\n", (unsigned) strlen(s));
     free(s);
+}
+
+static ubn_t *fib_sequence(uint32_t k);
+static ubn_t *fib_fast(uint32_t k);
+
+int main()
+{
+    const int target = 3000;
+    ubn_t *a = NULL, *b = NULL, *out = NULL;
+    out = ubignum_init(UBN_DEFAULT_CAPACITY);
+    a = ubignum_init(UBN_DEFAULT_CAPACITY);
+    b = ubignum_init(UBN_DEFAULT_CAPACITY);
+#if FIBSE
+    ubn_t *fib[2] = {NULL, NULL};
+    fib[0] = ubignum_init(UBN_DEFAULT_CAPACITY);
+    fib[1] = ubignum_init(UBN_DEFAULT_CAPACITY);
+    ubignum_set_zero(fib[0]);
+    ubignum_set_u64(fib[1], 1);
+    for (int i = 2; i <= target; i++) {
+        printf("%d is\t", i);
+        ubignum_add(fib[0], fib[1], &fib[i & 1]);
+        ubignum_show(fib[i & 1]);
+    }
+    ubignum_free(fib[0]);
+    ubignum_free(fib[1]);
+#endif
+
+#if FAST
+    for (int i = 0; i <= target; i++) {
+        ubn_t *v = fib_fast(i);
+        printf("%d is\t", i);
+        ubignum_show(v);
+        ubignum_free(v);
+    }
+#endif
+
+#if COMPARE
+    for (int i = 0; i <= target; i++) {
+        ubn_t *s = fib_sequence(i);
+        ubn_t *f = fib_fast(i);
+        if (ubignum_compare(s, f)) {
+            printf("i = %d\n", i);
+            ubignum_show(s);
+            ubignum_show(f);
+        }
+        ubignum_free(s);
+        ubignum_free(f);
+    }
+#endif
+
+    ubignum_free(out);
+    ubignum_free(a);
+    ubignum_free(b);
+    return 0;
 }
 
 static ubn_t *fib_fast(uint32_t k)
@@ -64,40 +119,15 @@ end:;
     return fast[2];
 }
 
-
-int main()
+static ubn_t *fib_sequence(uint32_t k)
 {
-    const int target = 10000;
-    ubn_t *a = NULL, *b = NULL, *out = NULL;
-    out = ubignum_init(UBN_DEFAULT_CAPACITY);
-    a = ubignum_init(UBN_DEFAULT_CAPACITY);
-    b = ubignum_init(UBN_DEFAULT_CAPACITY);
-#if FIBSE
     ubn_t *fib[2] = {NULL, NULL};
     fib[0] = ubignum_init(UBN_DEFAULT_CAPACITY);
-    fib[1] = ubignum_init(UBN_DEFAULT_CAPACITY);
     ubignum_set_zero(fib[0]);
+    fib[1] = ubignum_init(UBN_DEFAULT_CAPACITY);
     ubignum_set_u64(fib[1], 1);
-    for (int i = 2; i <= target; i++) {
-        printf("%d is\t", i);
+    for (int i = 2; i <= k; i++)
         ubignum_add(fib[0], fib[1], &fib[i & 1]);
-        ubignum_show(fib[i & 1]);
-    }
-    ubignum_free(fib[0]);
-    ubignum_free(fib[1]);
-#endif
-
-#if FAST
-    for (int i = 0; i <= target; i += 10) {
-        ubn_t *v = fib_fast(i);
-        printf("%d,", i);
-        ubignum_show(v);
-        ubignum_free(v);
-    }
-#endif
-
-    ubignum_free(out);
-    ubignum_free(a);
-    ubignum_free(b);
-    return 0;
+    ubignum_free(fib[(k & 1) ^ 1]);
+    return fib[k & 1];
 }
