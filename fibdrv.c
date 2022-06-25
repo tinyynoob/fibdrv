@@ -120,25 +120,14 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    if (!buf)
-        return -1;
-    ubn_t *N = NULL;
-    ktime_t kt;
-    kt = ktime_get();
-    N = fib_fast(*offset);
-    ktime_t tt = ktime_get();
+    ubn_t *N = fib_fast(*offset);
     char *s = ubignum_2decimal(N);
-    tt = ktime_sub(ktime_get(), tt);
     ubignum_free(N);
-    kt = ktime_sub(ktime_get(), kt);
-    kfree(s);
-    s = (char *) kcalloc(sizeof(char), 256, GFP_KERNEL);
-    snprintf(s, 256, "%lld %lld", ktime_to_ns(tt), ktime_to_ns(kt));
-    u32 len = strlen(s) + 1;
-    if (!copy_to_user(buf, s, len))
+    int len = strlen(s) + 1;
+    if (copy_to_user(buf, s, len))
         return -EFAULT;
     kfree(s);
-    return (ssize_t) len - 1;
+    return (ssize_t) len;
 }
 
 /* write operation is skipped */
