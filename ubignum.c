@@ -48,6 +48,7 @@ void ubignum_set_u64(ubn_t *N, const uint64_t n)
 }
 
 /* count leading zero in the most significant chunk
+ * -1 is returned if input is 0
  */
 static inline int ubignum_clz(const ubn_t *N)
 {
@@ -66,18 +67,15 @@ ubn_t *ubignum_init(uint16_t capacity)
 {
     ubn_t *N = (ubn_t *) MALLOC(sizeof(ubn_t));
     if (unlikely(!N))
-        goto struct_aloc_failed;
+        return NULL;
     if (unlikely(
-            !(N->data = (ubn_unit_t *) CALLOC(sizeof(ubn_unit_t), capacity))))
-        goto data_aloc_failed;
+            !(N->data = (ubn_unit_t *) CALLOC(sizeof(ubn_unit_t), capacity)))) {
+        FREE(N);
+        return NULL;
+    }
     N->capacity = capacity;
     N->size = 0;
     return N;
-
-data_aloc_failed:
-    FREE(N);
-struct_aloc_failed:
-    return NULL;
 }
 
 /*
@@ -250,56 +248,32 @@ bool ubignum_sub(const ubn_t *a, const ubn_t *b, ubn_t **out)
     return true;
 }
 
-/* a / 10 = (**quo)...(*rmd)
+/* dbt->dvd \div 10 = dbt->quo ... dbt->rmd
+ * @dbt must be initialized with ubn_dbten_init() before calling this function.
  */
-bool ubignum_divby_ten(const ubn_t *a, ubn_t **quo, int *rmd)
+void ubignum_divby_ten(ubn_dbten_t *dbt)
 {
-    if (!*quo || !rmd)
-        return false;
-    if (unlikely(ubignum_iszero(a))) {
-        ubignum_set_zero(*quo);
-        *rmd = 0;
-        return true;
+    ubignum_set_zero(dbt->quo);
+    ubignum_set_zero(dbt->subed);
+    if (unlikely(ubignum_iszero(dbt->dvd))) {
+        dbt->rmd = 0;
+        return;
     }
-    ubn_t *ans = NULL, *dvd = NULL, *suber = NULL, *ten = NULL;
-    if (unlikely(!(ans = ubignum_init(a->size))))
-        return false;
-    if (unlikely(!(dvd = ubignum_init(a->size))))
-        goto cleanup_ans;
-    if (unlikely(!(suber = ubignum_init(dvd->capacity + 1))))
-        goto cleanup_dvd;
-    if (unlikely(!(ten = ubignum_init(1))))
-        goto cleanup_suber;
-    ubignum_set_u64(ten, 10);
-
-    memcpy(dvd->data, a->data, a->size * sizeof(ubn_unit_t));
-    dvd->size = a->size;
-    while (ubignum_compare(dvd, ten) >= 0) {  // if dvd >= 10
-        uint16_t shift = dvd->size * UBN_UNIT_BIT - ubignum_clz(dvd) - 4;
-        ubignum_left_shift(ten, shift, &suber);
-        if (ubignum_compare(dvd, suber) < 0)
-            ubignum_left_shift(ten, --shift, &suber);
-        ans->data[shift / UBN_UNIT_BIT] |= (ubn_unit_t) 1
-                                           << (shift % UBN_UNIT_BIT);
-        ubignum_sub(dvd, suber, &dvd);
+    uint16_t dvd_sz = dbt->dvd->size;
+    while (ubignum_compare(dbt->dvd, dbt->ten) >= 0) {  // if dvd >= 10
+        uint16_t shift =
+            dbt->dvd->size * UBN_UNIT_BIT - ubignum_clz(dbt->dvd) - 4;
+        ubignum_left_shift(dbt->ten, shift, &dbt->subed);
+        if (ubignum_compare(dbt->dvd, dbt->subed) < 0)
+            ubignum_left_shift(dbt->ten, --shift, &dbt->subed);
+        dbt->quo->data[shift / UBN_UNIT_BIT] |= (ubn_unit_t) 1
+                                                << (shift % UBN_UNIT_BIT);
+        ubignum_sub(dbt->dvd, dbt->subed, &dbt->dvd);
     }
-    ans->size = a->size;
-    if (ans->data[a->size - 1] == 0)
-        ans->size--;
-    *rmd = (int) dvd->data[0];
-    ubignum_free(ten);
-    ubignum_free(suber);
-    ubignum_free(dvd);
-    ubignum_free(*quo);
-    *quo = ans;
-    return true;
-cleanup_suber:
-    ubignum_free(suber);
-cleanup_dvd:
-    ubignum_free(dvd);
-cleanup_ans:
-    ubignum_free(ans);
-    return false;
+    dbt->quo->size = dvd_sz;
+    if (dbt->quo->data[dvd_sz - 1] == 0)
+        dbt->quo->size--;
+    dbt->rmd = (int) dbt->dvd->data[0];
 }
 
 /* (*out) += a << (offset * UBN_UNIT_BIT)
@@ -365,8 +339,8 @@ bool ubignum_mult(const ubn_t *a, const ubn_t *b, ubn_t **out)
         ubn_unit_t overlap = 0;
         for (int j = 0; j < mcand->size; j++) {
             ubn_unit_t low, high;
-            ubn_unit_mult(mcand->data[j], mplier->data[i], high, low) carry =
-                ubn_unit_add(low, overlap, carry, &pprod->data[j]);
+            ubn_unit_mult(mcand->data[j], mplier->data[i], high, low);
+            carry = ubn_unit_add(low, overlap, carry, &pprod->data[j]);
             overlap = high;  // update overlap
         }
         pprod->data[mcand->size] =
@@ -445,47 +419,81 @@ char *ubignum_2decimal(const ubn_t *N)
 {
     if (ubignum_iszero(N)) {
         char *ans = (char *) CALLOC(sizeof(char), 2);
-        if (!ans)
+        if (unlikely(!ans))
             return NULL;
         ans[0] = '0';
         ans[1] = '\0';
         return ans;
     }
-    ubn_t *dvd = ubignum_init(N->size);
-    if (unlikely(!dvd))
+    ubn_dbten_t *dbt = ubn_dbten_init(N);
+    if (unlikely(!dbt))
         return NULL;
-    memcpy(dvd->data, N->data, N->size * sizeof(ubn_unit_t));
-    dvd->size = N->size;
-
     /* Let n be the number.
      * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
      * log_2(10) \approx 3.3219 \approx 7/2,  we simply choose 3
      */
     uint32_t digit = (UBN_UNIT_BIT * N->size / 3) + 1;
     char *ans = (char *) CALLOC(sizeof(char), digit);
-    if (!ans)
-        goto cleanup_dvd;
+    if (unlikely(!ans)) {
+        ubn_dbten_free(dbt);
+        return NULL;
+    }
+
     /* convert 2-base to 10-base */
     int index = 0;
-    while (dvd->size) {
-        int rmd;
-        if (unlikely(!ubignum_divby_ten(dvd, &dvd, &rmd)))
-            goto cleanup_ans;
-        ans[index++] = rmd | '0';
+    while (dbt->dvd->size) {
+        ubignum_divby_ten(dbt);
+        ans[index++] = dbt->rmd | '0';  // digit to ascii
+        ubignum_swapptr(&dbt->dvd, &dbt->quo);
     }
-    int len = index;
-    /* reverse string */
-    index = len - 1;
+    /* reverse the string */
+    index--;
     for (int i = 0; i < index; i++, index--) {
         char tmp = ans[i];
         ans[i] = ans[index];
         ans[index] = tmp;
     }
-    ubignum_free(dvd);
+    ubn_dbten_free(dbt);
     return ans;
-cleanup_ans:
-    FREE(ans);
+}
+
+/* Allocate space for members and copy dividend->data to ()->dvd->data.
+ */
+ubn_dbten_t *ubn_dbten_init(const ubn_t *dividend)
+{
+    ubn_dbten_t *dbt = (ubn_dbten_t *) MALLOC(sizeof(ubn_dbten_t));
+    if (unlikely(!dbt))
+        return NULL;
+    if (unlikely(!(dbt->dvd = ubignum_init(dividend->size))))
+        goto cleanup_struct;
+    if (unlikely(!(dbt->quo = ubignum_init(dividend->size))))
+        goto cleanup_dvd;
+    if (unlikely(!(dbt->subed = ubignum_init(dividend->size + 1))))
+        goto cleanup_quo;
+    if (unlikely(!(dbt->ten = ubignum_init(1))))
+        goto cleanup_subed;
+    ubignum_set_u64(dbt->ten, 10);
+    dbt->dvd->size = dividend->size;
+    memcpy(dbt->dvd->data, dividend->data, sizeof(ubn_unit_t) * dividend->size);
+    return dbt;
+cleanup_subed:
+    ubignum_free(dbt->subed);
+cleanup_quo:
+    ubignum_free(dbt->quo);
 cleanup_dvd:
-    ubignum_free(dvd);
+    ubignum_free(dbt->dvd);
+cleanup_struct:
+    FREE(dbt);
     return NULL;
+}
+
+void ubn_dbten_free(ubn_dbten_t *dbt)
+{
+    if (!dbt)
+        return;
+    ubignum_free(dbt->ten);
+    ubignum_free(dbt->subed);
+    ubignum_free(dbt->quo);
+    ubignum_free(dbt->dvd);
+    FREE(dbt);
 }

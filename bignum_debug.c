@@ -4,7 +4,7 @@
 #include "base.h"
 #include "ubignum.h"
 
-#define FIBSE 0
+#define FIBSE 1
 #define FAST 1
 
 static inline void ubignum_show(const ubn_t *N)
