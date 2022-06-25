@@ -1,6 +1,6 @@
 reset                                                                           
 set xlabel 'n'
-set ylabel 'average time (ns)'
+set ylabel 'average time at converting (ns)'
 set title 'time measurement'
 set term png enhanced font 'Times_New_Roman, 10'
 set output 'time.png'
@@ -10,6 +10,5 @@ set datafile separator ","
 set key left
 
 plot \
-"fast.csv" using 1:2 with linespoints linewidth 1 title "computing time", \
-"fast.csv" using 1:3 with linespoints linewidth 1 title "converting time", \
-"fast.csv" using 1:4 with linespoints linewidth 1 title "computing and converting time", \
+"fast_ori.csv" using 1:3 with linespoints linewidth 1 title "with original ubignum-sub()", \
+"fast_pos.csv" using 1:3 with linespoints linewidth 1 title "with in-place ubignum-sub()", \

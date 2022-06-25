@@ -21,7 +21,7 @@ make unload
 make load
 rm -rf data/*
 #sudo taskset -c $CPUID ./exp 0 > fib.csv
-sudo taskset -c $CPUID ./exp 1 > fast.csv
+sudo taskset -c $CPUID ./exp 1 > fast_pos.csv
 gnuplot time_plot.gp
 #sudo perf stat -r 20 -e cycles,instructions,cache-misses,cache-references,branch-instructions,branch-misses taskset -c $CPUID ./exp 1 > /dev/null
 
