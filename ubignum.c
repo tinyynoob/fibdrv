@@ -5,14 +5,14 @@
 #include <linux/compiler.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#include <linux/string.h>  // memset
+#include <linux/string.h>  // memset, memcpy, memmove
 #include <linux/types.h>
 #else
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>  // memset
+#include <string.h>  // memset, memcpy, memmove
 #endif
 
 static inline int ubignum_clz(const ubn_t *N);
@@ -195,7 +195,7 @@ bool ubignum_add(const ubn_t *a, const ubn_t *b, ubn_t **out)
         new_size = MAX(a->size, b->size);
 
     while (unlikely((*out)->capacity < new_size))
-        if (!ubignum_recap(*out, (*out)->capacity * 2))
+        if (unlikely(!ubignum_recap(*out, (*out)->capacity * 2)))
             return false;
 
     if (*out != a && *out != b)  // if no pointer aliasing
@@ -215,33 +215,38 @@ bool ubignum_add(const ubn_t *a, const ubn_t *b, ubn_t **out)
 }
 
 /* *out = a - b
- * Since the system is unsigned, a >= b should be guaranteed to get a positive
- * result.
+ * Since the system is unsigned, a >= b should be guaranteed to obtain a
+ * positive result.
  */
 bool ubignum_sub(const ubn_t *a, const ubn_t *b, ubn_t **out)
 {
-    if (unlikely(ubignum_compare(a, b) < 0))
+    if (unlikely(ubignum_compare(a, b) < 0)) {  // invalid
         return false;
-    /* ones' complement of b */
-    ubn_t *cmt =
-        ubignum_init(a->size);  // maybe there is way without memory allocation?
-    if (unlikely(!cmt))
-        return false;
-    for (int i = 0; i < b->size; i++)
-        cmt->data[i] = ~b->data[i];
-    for (int i = b->size; i < a->size; i++)
-        cmt->data[i] = UBN_UNIT_MAX;
+    } else if (unlikely(ubignum_compare(a, b) == 0)) {
+        ubignum_set_zero(*out);
+        return true;
+    }
 
-    int carry = 1;                     // to become two's complement
-    for (int i = 0; i < a->size; i++)  // compute result and store in cmt
-        carry = ubn_unit_add(a->data[i], cmt->data[i], carry, &cmt->data[i]);
+    if ((*out)->capacity < a->size) {
+        if (unlikely(!ubignum_recap(*out, a->size)))
+            return false;
+    } else if ((*out)->size > a->size) {
+        memset((*out)->data + a->size, 0,
+               sizeof(ubn_unit_t) * ((*out)->size - a->size));
+    }
+
+    // compute subtraction with adding the two's complement of @b
+    int carry = 1;
+    for (int i = 0; i < b->size; i++)
+        carry = ubn_unit_add(a->data[i], ~b->data[i], carry, &(*out)->data[i]);
+    for (int i = b->size; i < a->size; i++)
+        carry = ubn_unit_add(a->data[i], UBN_UNIT_MAX, carry, &(*out)->data[i]);
     // the final carry is discarded
-    cmt->size = a->size;
-    for (int i = a->size - 1; i >= 0; i--)
-        if (!cmt->data[i])
-            cmt->size--;
-    ubignum_free(*out);
-    *out = cmt;
+
+    (*out)->size = a->size;
+    while ((*out)->data[(*out)->size - 1] == 0)
+        (*out)->size--;
+
     return true;
 }
 
