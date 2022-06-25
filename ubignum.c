@@ -129,7 +129,8 @@ int ubignum_compare(const ubn_t *a, const ubn_t *b)
     return 0;
 }
 
-/* left shift a->data by d bit */
+/* left shift a->data by d bit
+ */
 bool ubignum_left_shift(const ubn_t *a, uint16_t d, ubn_t **out)
 {
     if (ubignum_iszero(a)) {
@@ -152,23 +153,27 @@ bool ubignum_left_shift(const ubn_t *a, uint16_t d, ubn_t **out)
     if ((*out)->capacity < new_size)
         if (unlikely(!ubignum_recap(*out, new_size)))
             return false;
-    (*out)->size = new_size;
 
-    memset((*out)->data, 0, chunk_shift * sizeof(ubn_unit_t));
-    /* copy data from a to (*out) */
+    /* copy data from a to (*out)
+     * We have to copy from higher to prevent overlaping @a in case there is
+     * pointer aliasing.
+     */
     if (shift) {
-        int ai = 0, oi = chunk_shift;
+        int ai = a->size - 1, oi = a->size + chunk_shift - 1;
+        if (shift > ubignum_clz(a))
+            (*out)->data[oi + 1] = a->data[ai] >> (UBN_UNIT_BIT - shift);
         // merge the lower part from [ai] and the higher part from [ai - 1]
-        (*out)->data[oi++] = a->data[ai++] << shift;
-        for (; ai < a->size; ai++)
-            (*out)->data[oi++] = a->data[ai] << shift |
+        for (; ai > 0; ai--)
+            (*out)->data[oi--] = a->data[ai] << shift |
                                  a->data[ai - 1] >> (UBN_UNIT_BIT - shift);
-        if (oi < new_size)
-            (*out)->data[oi] = a->data[ai - 1] >> (UBN_UNIT_BIT - shift);
+        (*out)->data[oi] = a->data[ai] << shift;  // ai == 0
     } else {
         memmove((*out)->data + chunk_shift, a->data,
                 a->size * sizeof(ubn_unit_t));
     }
+    memset((*out)->data, 0,
+           sizeof(ubn_unit_t) * chunk_shift);  // set the lowest to 0
+    (*out)->size = new_size;
     /* end copy */
     return true;
 }
