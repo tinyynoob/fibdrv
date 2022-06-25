@@ -38,7 +38,7 @@ uint64_t average(int64_t *nums, int numsSize)
 
 int main(int argc, char *argv[])
 {
-    const int offset = 200;
+    const int offset = 1000;
     const int select = atoi(argv[1]);
     char buf[100000];
 

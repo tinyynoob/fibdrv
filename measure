@@ -19,14 +19,10 @@ sudo bash -c "echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo"
 make
 make unload
 make load
-rm -rf data/*
-#sudo taskset -c $CPUID ./exp 0 > fib.csv
+# sudo taskset -c $CPUID ./exp 0 > fib.csv
 sudo taskset -c $CPUID ./exp 1 > fast_pos.csv
 gnuplot time_plot.gp
-#sudo perf stat -r 20 -e cycles,instructions,cache-misses,cache-references,branch-instructions,branch-misses taskset -c $CPUID ./exp 1 > /dev/null
-
-
-
+#sudo perf stat -r 10 -e cycles,instructions,cache-misses,cache-references,branch-instructions,branch-misses taskset -c $CPUID ./exp 1 > /dev/null
 # restore the original system settings
 sudo bash -c "echo $ORIG_ASLR >  /proc/sys/kernel/randomize_va_space"
 sudo bash -c "echo $ORIG_GOV > /sys/devices/system/cpu/cpu$CPUID/cpufreq/scaling_governor"
