@@ -17,11 +17,13 @@
 #if defined(__LP64__) || defined(__x86_64__) || defined(__amd64__) || \
     defined(__aarch64__)
 typedef uint64_t ubn_unit_t;
+typedef __uint128_t ubn_extunit_t;
 #define UBN_UNIT_BIT 64
 #define UBN_UNIT_MAX 0xFFFFFFFFFFFFFFFFu
 #define CPU64 1
 #else
 typedef uint32_t ubn_unit_t;
+typedef uint64_t ubn_extunit_t;
 #define UBN_UNIT_BIT 32
 #define UBN_UNIT_MAX 0xFFFFFFFFu
 #define CPU64 0

@@ -53,17 +53,15 @@ typedef struct {
  * dvd \div 10 = quo ... rmd
  */
 typedef struct {
-    ubn_t *dvd;    // dividend
-    ubn_t *quo;    // quotient
-    ubn_t *subed;  // subtrahend
-    ubn_t *ten;    // constant 10
-    int rmd;       // remainder, \in [0,9]
+    ubn_t *dvd;  // dividend
+    ubn_t *quo;  // quotient
+    int rmd;     // remainder, \in [0,9]
 } ubn_dbten_t;
 
 ubn_t *ubignum_init(uint16_t capacity);
 bool ubignum_recap(ubn_t *N, uint16_t new_capacity);
 void ubignum_free(ubn_t *N);
-static inline void ubignum_swapptr(const ubn_t **a, const ubn_t **b);
+static inline void ubignum_swapptr(ubn_t **a, ubn_t **b);
 static inline int ubn_unit_add(ubn_unit_t a,
                                ubn_unit_t b,
                                int cin,
@@ -74,7 +72,7 @@ void ubignum_set_u64(ubn_t *N, const uint64_t n);
 int ubignum_compare(const ubn_t *a, const ubn_t *b);
 bool ubignum_left_shift(ubn_t *a, uint16_t d, ubn_t **out);
 bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out);
-bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out);
+// bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out);
 bool ubignum_mult(ubn_t *a, ubn_t *b, ubn_t **out);
 bool ubignum_square(ubn_t *a, ubn_t **out);
 char *ubignum_2decimal(const ubn_t *N);
@@ -103,7 +101,7 @@ static inline int ubn_unit_add(ubn_unit_t a,
 }
 
 /* swap two ubn_t */
-static inline void ubignum_swapptr(const ubn_t **a, const ubn_t **b)
+static inline void ubignum_swapptr(ubn_t **a, ubn_t **b)
 {
     ubn_t *tmp = *a;
     *a = *b;
