@@ -85,7 +85,7 @@ ubn_t *ubignum_init(uint16_t capacity)
  */
 bool ubignum_recap(ubn_t *N, uint16_t new_capacity)
 {
-    if (!new_capacity) {
+    if (unlikely(!new_capacity)) {
         FREE(N->data);
         N->data = NULL;
         N->capacity = 0;
@@ -131,12 +131,12 @@ int ubignum_compare(const ubn_t *a, const ubn_t *b)
 
 /* left shift a->data by d bit
  */
-bool ubignum_left_shift(const ubn_t *a, uint16_t d, ubn_t **out)
+bool ubignum_left_shift(ubn_t *a, uint16_t d, ubn_t **out)
 {
     if (ubignum_iszero(a)) {
         ubignum_set_zero(*out);
         return true;
-    } else if (d == 0) {
+    } else if (unlikely(d == 0)) {
         if (a == *out)
             return true;
         if ((*out)->capacity < a->size)
@@ -150,7 +150,7 @@ bool ubignum_left_shift(const ubn_t *a, uint16_t d, ubn_t **out)
     const uint16_t chunk_shift = d / UBN_UNIT_BIT;
     const uint16_t shift = d % UBN_UNIT_BIT;
     const uint16_t new_size = a->size + chunk_shift + (shift > ubignum_clz(a));
-    if ((*out)->capacity < new_size)
+    if (unlikely((*out)->capacity < new_size))
         if (unlikely(!ubignum_recap(*out, new_size)))
             return false;
 
@@ -172,19 +172,17 @@ bool ubignum_left_shift(const ubn_t *a, uint16_t d, ubn_t **out)
                 a->size * sizeof(ubn_unit_t));
     }
     memset((*out)->data, 0,
-           sizeof(ubn_unit_t) * chunk_shift);  // set the lowest to 0
+           sizeof(ubn_unit_t) * chunk_shift);  // set the remaining to 0
     (*out)->size = new_size;
     /* end copy */
     return true;
 }
 
-
-
 /* (*out) = a + b
  * Aliasing arguments are acceptable.
  * If false is returned, the values of (*out) remains unchanged.
  */
-bool ubignum_add(const ubn_t *a, const ubn_t *b, ubn_t **out)
+bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out)
 {
     /* compute new size */
     uint16_t new_size;
@@ -206,7 +204,7 @@ bool ubignum_add(const ubn_t *a, const ubn_t *b, ubn_t **out)
     int i = 0, carry = 0;
     for (i = 0; i < MIN(a->size, b->size); i++)
         carry = ubn_unit_add(a->data[i], b->data[i], carry, &(*out)->data[i]);
-    const ubn_t *const remain = (i == a->size) ? b : a;
+    ubn_t *const remain = (i == a->size) ? b : a;
     for (; i < remain->size; i++)
         carry = ubn_unit_add(remain->data[i], 0, carry, &(*out)->data[i]);
     (*out)->size = remain->size;
@@ -221,7 +219,7 @@ bool ubignum_add(const ubn_t *a, const ubn_t *b, ubn_t **out)
  * Since the system is unsigned, a >= b should be guaranteed to obtain a
  * positive result.
  */
-bool ubignum_sub(const ubn_t *a, const ubn_t *b, ubn_t **out)
+bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out)
 {
     if (unlikely(ubignum_compare(a, b) < 0)) {  // invalid
         return false;
@@ -230,7 +228,7 @@ bool ubignum_sub(const ubn_t *a, const ubn_t *b, ubn_t **out)
         return true;
     }
 
-    if ((*out)->capacity < a->size) {
+    if (unlikely((*out)->capacity < a->size)) {
         if (unlikely(!ubignum_recap(*out, a->size)))
             return false;
     } else if ((*out)->size > a->size) {
@@ -265,7 +263,7 @@ void ubignum_divby_ten(ubn_dbten_t *dbt)
         return;
     }
     uint16_t dvd_sz = dbt->dvd->size;
-    while (ubignum_compare(dbt->dvd, dbt->ten) >= 0) {  // if dvd >= 10
+    while (likely(ubignum_compare(dbt->dvd, dbt->ten) >= 0)) {  // if dvd >= 10
         uint16_t shift =
             dbt->dvd->size * UBN_UNIT_BIT - ubignum_clz(dbt->dvd) - 4;
         ubignum_left_shift(dbt->ten, shift, &dbt->subed);
@@ -307,7 +305,7 @@ static void ubignum_mult_add(const ubn_t *restrict a,
 
 /* *out = a * b
  */
-bool ubignum_mult(const ubn_t *a, const ubn_t *b, ubn_t **out)
+bool ubignum_mult(ubn_t *a, ubn_t *b, ubn_t **out)
 {
     if (ubignum_iszero(a) || ubignum_iszero(b)) {
         ubignum_set_zero(*out);
@@ -363,7 +361,7 @@ cleanup_ans:
 }
 
 /* (*out) = a * a */
-bool ubignum_square(const ubn_t *a, ubn_t **out)
+bool ubignum_square(ubn_t *a, ubn_t **out)
 {
     if (ubignum_iszero(a)) {
         ubignum_set_zero(*out);
@@ -446,7 +444,7 @@ char *ubignum_2decimal(const ubn_t *N)
 
     /* convert 2-base to 10-base */
     int index = 0;
-    while (dbt->dvd->size) {
+    while (likely(dbt->dvd->size)) {
         ubignum_divby_ten(dbt);
         ans[index++] = dbt->rmd | '0';  // digit to ascii
         ubignum_swapptr(&dbt->dvd, &dbt->quo);
