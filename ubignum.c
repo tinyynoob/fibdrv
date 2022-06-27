@@ -518,9 +518,11 @@ char *ubignum_2decimal(const ubn_t *N)
         return NULL;
     /* Let n be the number.
      * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
-     * log_2(10) \approx 3.3219 \approx 7/2,  we simply choose 3
+     * log_2(10) \approx 3.3219, we may choose 3.25
+     * (x * 13) >> 2 is equivalent to x / 3.25
      */
-    uint32_t digit = (UBN_UNIT_BIT * N->size / 3) + 1 + SUPERTEN_EXP;
+    uint32_t digit = (UBN_UNIT_BIT * N->size - ubignum_clz(N)) * 13;
+    digit = (digit >> 2) + 1 + SUPERTEN_EXP;
     char *ans = (char *) CALLOC(sizeof(char), digit);
     if (unlikely(!ans))
         goto cleanup_dbt;
@@ -529,20 +531,7 @@ char *ubignum_2decimal(const ubn_t *N)
     int32_t index = 0;
     while (likely(dbt->dvd->size)) {
         ubignum_divby_superten(dbt);
-#if CPU64
-        char s[16 + 1];
-        if (unlikely(
-                !snprintf(s, 16 + 1, "%016llu", (unsigned long long) dbt->rmd)))
-            goto cleanup_ans;
-        for (int i = 16 - 1; i >= 0; i--)
-            ans[index++] = s[i];
-#else
-        char s[8 + 1];
-        if (unlikely(!snprintf(s, 8 + 1, "%08u", dbt->rmd)))
-            goto cleanup_ans;
-        for (int i = 8 - 1; i >= 0; i--)
-            ans[index++] = s[i];
-#endif
+        update_str_by_super_rmd(dbt->rmd, ans, index);
         ubignum_swapptr(&dbt->dvd, &dbt->quo);
     }
     /* reverse the string */

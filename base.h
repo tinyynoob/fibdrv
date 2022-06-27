@@ -56,17 +56,43 @@ typedef uint64_t ubn_extunit_t;
 #endif
 
 #if CPU64
+#ifndef ubn_unit_mult
 #define ubn_unit_mult(a, b, hi, lo)                                \
     do {                                                           \
         __asm__("mulq %3" : "=a"(lo), "=d"(hi) : "a"(a), "rm"(b)); \
     } while (0);
+#endif
 #else
+#ifndef ubn_unit_mult
 #define ubn_unit_mult(a, b, hi, lo)                                \
     do {                                                           \
         __asm__("mull %3" : "=a"(lo), "=d"(hi) : "a"(a), "rm"(b)); \
     } while (0);
 #endif
+#endif
 
+
+#if CPU64
+#define update_str_by_super_rmd(rmd, str, index)                            \
+    do {                                                                    \
+        char s[SUPERTEN_EXP + 1];                                           \
+        if (unlikely(!snprintf(s, SUPERTEN_EXP + 1, "%0*llu", SUPERTEN_EXP, \
+                               (unsigned long long) rmd)))                  \
+            goto cleanup_##str;                                             \
+        for (int i = SUPERTEN_EXP - 1; i >= 0; i--)                         \
+            str[index++] = s[i];                                            \
+    } while (0);
+#else
+#define update_str_by_super_rmd(rmd, str, index)                          \
+    do {                                                                  \
+        char s[SUPERTEN_EXP + 1];                                         \
+        if (unlikely(!snprintf(s, SUPERTEN_EXP + 1, "%0*u", SUPERTEN_EXP, \
+                               (unsigned) rmd)))                          \
+            goto cleanup_##str;                                           \
+        for (int i = SUPERTEN_EXP - 1; i >= 0; i--)                       \
+            str[index++] = s[i];                                          \
+    } while (0);
+#endif
 
 
 #endif
