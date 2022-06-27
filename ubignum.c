@@ -17,7 +17,7 @@
 
 static inline int ubignum_clz(const ubn_t *N);
 static void ubignum_mult_add(const ubn_t *restrict a,
-                             uint16_t offset,
+                             uint32_t offset,
                              ubn_t *restrict *out);
 
 
@@ -63,7 +63,7 @@ static inline int ubignum_clz(const ubn_t *N)
 
 /* Initialize a big number and set its value to 0
  */
-ubn_t *ubignum_init(uint16_t capacity)
+ubn_t *ubignum_init(uint32_t capacity)
 {
     ubn_t *N = (ubn_t *) MALLOC(sizeof(ubn_t));
     if (unlikely(!N))
@@ -83,7 +83,7 @@ ubn_t *ubignum_init(uint16_t capacity)
  * If false is returned, (*N) remains unchanged.
  * Set (*N)->data to NULL if new_capacity is 0.
  */
-bool ubignum_recap(ubn_t *N, uint16_t new_capacity)
+bool ubignum_recap(ubn_t *N, uint32_t new_capacity)
 {
     if (unlikely(!new_capacity)) {
         FREE(N->data);
@@ -131,7 +131,7 @@ bool ubignum_recap(ubn_t *N, uint16_t new_capacity)
 
 /* left shift a->data by d bit
  */
-bool ubignum_left_shift(ubn_t *a, uint16_t d, ubn_t **out)
+bool ubignum_left_shift(ubn_t *a, uint32_t d, ubn_t **out)
 {
     if (ubignum_iszero(a)) {
         ubignum_set_zero(*out);
@@ -147,9 +147,9 @@ bool ubignum_left_shift(ubn_t *a, uint16_t d, ubn_t **out)
         return true;
     }
 
-    const uint16_t chunk_shift = d / UBN_UNIT_BIT;
-    const uint16_t shift = d % UBN_UNIT_BIT;
-    const uint16_t new_size = a->size + chunk_shift + (shift > ubignum_clz(a));
+    const uint32_t chunk_shift = d / UBN_UNIT_BIT;
+    const uint32_t shift = d % UBN_UNIT_BIT;
+    const uint32_t new_size = a->size + chunk_shift + (shift > ubignum_clz(a));
     if (unlikely((*out)->capacity < new_size))
         if (unlikely(!ubignum_recap(*out, new_size)))
             return false;
@@ -185,7 +185,7 @@ bool ubignum_left_shift(ubn_t *a, uint16_t d, ubn_t **out)
 bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out)
 {
     /* compute new size */
-    uint16_t new_size;
+    uint32_t new_size;
     if (ubignum_iszero(a) || ubignum_iszero(b))
         new_size = MAX(a->size, b->size);
     else if (a->size >= b->size && ubignum_clz(a) == 0)
@@ -264,7 +264,7 @@ bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out)
 //         dbt->rmd = 0;
 //         return;
 //     }
-//     const uint16_t dvd_ori_sz = dbt->dvd->size;
+//     const uint32_t dvd_ori_sz = dbt->dvd->size;
 //     /* Do division by subtraction.
 //      * In each iteration, obtain one set bit in quotient.
 //      * For @dvd with the leading: 00000001xxxxxxxxxxxxxxxxx
@@ -275,14 +275,14 @@ bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out)
 //      * Otherwise, the ten have to be right-shifted to subtract @dvd.
 //      */
 //     while (likely(dbt->dvd->size >= 2)) {
-//         const uint16_t clz = ubignum_clz(dbt->dvd);
+//         const uint32_t clz = ubignum_clz(dbt->dvd);
 //         ubn_extunit_t m = (ubn_extunit_t) dbt->dvd->data[dbt->dvd->size - 1]
 //                               << UBN_UNIT_BIT |
 //                           dbt->dvd->data[dbt->dvd->size - 2];
-//         const uint16_t midbits = (m >> (2 * UBN_UNIT_BIT - 3 - clz)) & 0x3u;
+//         const uint32_t midbits = (m >> (2 * UBN_UNIT_BIT - 3 - clz)) & 0x3u;
 //         m -= (ubn_extunit_t) 10 << (2 * UBN_UNIT_BIT - 4 - clz - !midbits);
 //         // 4 is the length of 0b1010
-//         const uint16_t quo_shift =
+//         const uint32_t quo_shift =
 //             dbt->dvd->size * UBN_UNIT_BIT - 4 - clz - !midbits;
 
 //         dbt->dvd->data[dbt->dvd->size - 1] = m >> UBN_UNIT_BIT;
@@ -297,8 +297,8 @@ bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out)
 //     while (likely(dbt->dvd->size) &&
 //            likely(dbt->dvd->data[0] >= 10)) {  // if dvd->size == 1 && dvd >=
 //            10
-//         const uint16_t clz = ubignum_clz(dbt->dvd);
-//         const uint16_t midbits =
+//         const uint32_t clz = ubignum_clz(dbt->dvd);
+//         const uint32_t midbits =
 //             (dbt->dvd->data[0] >> (UBN_UNIT_BIT - 3 - clz)) & 0x3u;
 //         dbt->dvd->data[0] -= (ubn_unit_t) 10
 //                              << (UBN_UNIT_BIT - 4 - clz - !midbits);
@@ -322,16 +322,16 @@ void ubignum_divby_superten(ubn_dbten_t *dbt)
         dbt->rmd = 0;
         return;
     }
-    const uint16_t dvd_ori_sz = dbt->dvd->size;
+    const uint32_t dvd_ori_sz = dbt->dvd->size;
 
     while (likely(dbt->dvd->size >= 2)) {
-        const uint16_t clz = ubignum_clz(dbt->dvd);
+        const uint32_t clz = ubignum_clz(dbt->dvd);
         ubn_extunit_t m = (ubn_extunit_t) dbt->dvd->data[dbt->dvd->size - 1]
                               << UBN_UNIT_BIT |
                           dbt->dvd->data[dbt->dvd->size - 2];
         ubn_extunit_t subed = (ubn_extunit_t) SUPERTEN
                               << (2 * UBN_UNIT_BIT - SUPERTEN_BIT - clz);
-        const uint16_t quo_shift =
+        const uint32_t quo_shift =
             dbt->dvd->size * UBN_UNIT_BIT - SUPERTEN_BIT - clz - !(m >= subed);
         subed = subed >> !(m >= subed);
         m -= subed;
@@ -347,10 +347,10 @@ void ubignum_divby_superten(ubn_dbten_t *dbt)
     while (likely(dbt->dvd->size) &&
            likely(dbt->dvd->data[0] >=
                   SUPERTEN)) {  // if dvd->size == 1 && dvd >= SUPERTEN
-        const uint16_t clz = ubignum_clz(dbt->dvd);
+        const uint32_t clz = ubignum_clz(dbt->dvd);
         ubn_unit_t subed = (ubn_unit_t) SUPERTEN
                            << (UBN_UNIT_BIT - SUPERTEN_BIT - clz);
-        const uint16_t quo_shift =
+        const uint32_t quo_shift =
             UBN_UNIT_BIT - SUPERTEN_BIT - clz - !(dbt->dvd->data[0] >= subed);
         subed = subed >> !(dbt->dvd->data[0] >= subed);
         dbt->dvd->data[0] -= subed;
@@ -368,7 +368,7 @@ void ubignum_divby_superten(ubn_dbten_t *dbt)
  * The capacity of (*out) must be guaranteed in mult(). No recap is done here!
  */
 static void ubignum_mult_add(const ubn_t *restrict a,
-                             uint16_t offset,
+                             uint32_t offset,
                              ubn_t *restrict *out)
 {
     if (ubignum_iszero(a))
@@ -522,7 +522,7 @@ char *ubignum_2decimal(const ubn_t *N)
      * (x * 13) >> 2 is equivalent to x / 3.25
      */
     uint32_t digit = (UBN_UNIT_BIT * N->size - ubignum_clz(N)) * 13;
-    digit = (digit >> 2) + 1 + SUPERTEN_EXP;
+    digit = (digit >> 2) + 1 + SUPERTEN_EXP;  // +1 for containing '\0'
     char *ans = (char *) CALLOC(sizeof(char), digit);
     if (unlikely(!ans))
         goto cleanup_dbt;

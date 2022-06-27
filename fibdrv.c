@@ -17,7 +17,7 @@ MODULE_VERSION("0.1");
 
 #define DEV_FIBONACCI_NAME "fibonacci"
 
-#define MAX_LENGTH 100000
+#define MAX_LENGTH 1000001
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
@@ -120,7 +120,7 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    ubn_t *N = fib_sequence(*offset);
+    ubn_t *N = fib_fast(*offset);
     char *s = ubignum_2decimal(N);
     ubignum_free(N);
     int len = strlen(s) + 1;

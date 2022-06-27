@@ -4,9 +4,9 @@
 #include "base.h"
 #include "ubignum.h"
 
-#define FIBSE 1
+#define FIBSE 0
 #define FAST 0
-#define COMPARE 0
+#define COMPARE 1
 
 static inline void ubignum_show(const ubn_t *N)
 {
@@ -21,10 +21,6 @@ static ubn_t *fib_fast(uint32_t k);
 int main()
 {
     const int target = 200;
-    ubn_t *a = NULL, *b = NULL, *out = NULL;
-    out = ubignum_init(UBN_DEFAULT_CAPACITY);
-    a = ubignum_init(UBN_DEFAULT_CAPACITY);
-    b = ubignum_init(UBN_DEFAULT_CAPACITY);
 #if FIBSE
     ubn_t *fib[2] = {NULL, NULL};
     fib[0] = ubignum_init(UBN_DEFAULT_CAPACITY);
@@ -62,12 +58,24 @@ int main()
         ubignum_free(f);
     }
 #endif
-
-    ubignum_free(out);
-    ubignum_free(a);
+    const int n = 1000000;
+    ubn_t *b = fib_fast(n);
+    printf("fib(%d) uses %u chunks.\n", n, b->size);
+    ubignum_show(b);
     ubignum_free(b);
+
+    // ubn_t *a = ubignum_init(UBN_DEFAULT_CAPACITY);
+    // ubignum_set_u64(a, SUPERTEN);
+    // unsigned e = 65536;
+    // for (int i = e / SUPERTEN_EXP; i > 1; i >>= 1) {
+    //     ubignum_square(a, &a);
+    // }
+    // printf("10 exponenting %d uses %u chunks.\n", e, a->size);
+    // ubignum_free(a);
     return 0;
 }
+
+
 
 static ubn_t *fib_fast(uint32_t k)
 {

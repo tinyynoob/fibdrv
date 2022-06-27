@@ -45,8 +45,8 @@
  */
 typedef struct {
     ubn_unit_t *data;
-    uint16_t size;
-    uint16_t capacity;
+    uint32_t size;
+    uint32_t capacity;
 } ubn_t;
 
 /* The struct that is used for ubignum_divby_ten().
@@ -58,8 +58,8 @@ typedef struct {
     ubn_unit_t rmd;  // store remainder
 } ubn_dbten_t;
 
-ubn_t *ubignum_init(uint16_t capacity);
-bool ubignum_recap(ubn_t *N, uint16_t new_capacity);
+ubn_t *ubignum_init(uint32_t capacity);
+bool ubignum_recap(ubn_t *N, uint32_t new_capacity);
 void ubignum_free(ubn_t *N);
 static inline void ubignum_swapptr(ubn_t **a, ubn_t **b);
 static inline int ubn_unit_add(ubn_unit_t a,
@@ -70,7 +70,7 @@ static inline bool ubignum_iszero(const ubn_t *N);
 void ubignum_set_zero(ubn_t *N);
 void ubignum_set_u64(ubn_t *N, const uint64_t n);
 // int ubignum_compare(const ubn_t *a, const ubn_t *b);
-bool ubignum_left_shift(ubn_t *a, uint16_t d, ubn_t **out);
+bool ubignum_left_shift(ubn_t *a, uint32_t d, ubn_t **out);
 bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out);
 // bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out);
 bool ubignum_mult(ubn_t *a, ubn_t *b, ubn_t **out);
