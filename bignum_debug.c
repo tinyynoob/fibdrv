@@ -5,8 +5,8 @@
 #include "ubignum.h"
 
 #define FIBSE 1
-#define FAST 1
-#define COMPARE 1
+#define FAST 0
+#define COMPARE 0
 
 static inline void ubignum_show(const ubn_t *N)
 {
@@ -20,7 +20,7 @@ static ubn_t *fib_fast(uint32_t k);
 
 int main()
 {
-    const int target = 1000;
+    const int target = 200;
     ubn_t *a = NULL, *b = NULL, *out = NULL;
     out = ubignum_init(UBN_DEFAULT_CAPACITY);
     a = ubignum_init(UBN_DEFAULT_CAPACITY);
