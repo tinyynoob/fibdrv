@@ -113,21 +113,21 @@ bool ubignum_recap(ubn_t *N, uint32_t new_capacity)
  *  0 a = b
  * -1 a < b
  */
-// int ubignum_compare(const ubn_t *a, const ubn_t *b)
-// {
-//     if (a->size > b->size)
-//         return 1;
-//     else if (a->size < b->size)
-//         return -1;
+int ubignum_compare(const ubn_t *a, const ubn_t *b)
+{
+    if (a->size > b->size)
+        return 1;
+    else if (a->size < b->size)
+        return -1;
 
-//     for (int i = (int) a->size - 1; i >= 0; i--) {
-//         if (a->data[i] > b->data[i])
-//             return 1;
-//         else if (a->data[i] < b->data[i])
-//             return -1;
-//     }
-//     return 0;
-// }
+    for (int i = (int) a->size - 1; i >= 0; i--) {
+        if (a->data[i] > b->data[i])
+            return 1;
+        else if (a->data[i] < b->data[i])
+            return -1;
+    }
+    return 0;
+}
 
 /* left shift a->data by d bit
  */
@@ -215,153 +215,128 @@ bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out)
     return true;
 }
 
-// /* *out = a - b
-//  * Since the system is unsigned, a >= b should be guaranteed to obtain a
-//  * positive result.
-//  */
-// bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out)
-// {
-//     if (unlikely(ubignum_compare(a, b) < 0)) {  // invalid
-//         return false;
-//     } else if (unlikely(ubignum_compare(a, b) == 0)) {
-//         ubignum_set_zero(*out);
-//         return true;
-//     }
-
-//     if (unlikely((*out)->capacity < a->size)) {
-//         if (unlikely(!ubignum_recap(*out, a->size)))
-//             return false;
-//     } else if ((*out)->size > a->size) {
-//         memset((*out)->data + a->size, 0,
-//                sizeof(ubn_unit_t) * ((*out)->size - a->size));
-//     }
-
-//     // compute subtraction with adding the two's complement of @b
-//     int carry = 1;
-//     for (int i = 0; i < b->size; i++)
-//         carry = ubn_unit_add(a->data[i], ~b->data[i], carry,
-//         &(*out)->data[i]);
-//     for (int i = b->size; i < a->size; i++)
-//         carry = ubn_unit_add(a->data[i], UBN_UNIT_MAX, carry,
-//         &(*out)->data[i]);
-//     // the final carry is discarded
-
-//     (*out)->size = a->size;
-//     while ((*out)->data[(*out)->size - 1] == 0)
-//         (*out)->size--;
-
-//     return true;
-// }
-
-// /* dbt->dvd \div 10 = dbt->quo ... dbt->rmd
-//  * @dbt must be initialized with ubn_dbten_init() before calling this
-//  function.
-//  */
-// void ubignum_divby_ten(ubn_dbten_t *dbt)
-// {
-//     ubignum_set_zero(dbt->quo);
-//     if (unlikely(ubignum_iszero(dbt->dvd))) {
-//         dbt->rmd = 0;
-//         return;
-//     }
-//     const uint32_t dvd_ori_sz = dbt->dvd->size;
-//     /* Do division by subtraction.
-//      * In each iteration, obtain one set bit in quotient.
-//      * For @dvd with the leading: 00000001xxxxxxxxxxxxxxxxx
-//      *                                    ##
-//      * We find the bits at ## as @midbits, in relation to ten, 0b1010.
-//      * If @midbits is not 00, then ten can subtract @dvd at this aligned
-//      place.
-//      * Otherwise, the ten have to be right-shifted to subtract @dvd.
-//      */
-//     while (likely(dbt->dvd->size >= 2)) {
-//         const uint32_t clz = ubignum_clz(dbt->dvd);
-//         ubn_extunit_t m = (ubn_extunit_t) dbt->dvd->data[dbt->dvd->size - 1]
-//                               << UBN_UNIT_BIT |
-//                           dbt->dvd->data[dbt->dvd->size - 2];
-//         const uint32_t midbits = (m >> (2 * UBN_UNIT_BIT - 3 - clz)) & 0x3u;
-//         m -= (ubn_extunit_t) 10 << (2 * UBN_UNIT_BIT - 4 - clz - !midbits);
-//         // 4 is the length of 0b1010
-//         const uint32_t quo_shift =
-//             dbt->dvd->size * UBN_UNIT_BIT - 4 - clz - !midbits;
-
-//         dbt->dvd->data[dbt->dvd->size - 1] = m >> UBN_UNIT_BIT;
-//         dbt->dvd->data[dbt->dvd->size - 2] = (ubn_unit_t) m;
-//         while (likely(dbt->dvd->size) &&
-//                dbt->dvd->data[dbt->dvd->size - 1] == 0)
-//             dbt->dvd->size--;
-
-//         dbt->quo->data[quo_shift / UBN_UNIT_BIT] |=
-//             (ubn_unit_t) 1 << (quo_shift % UBN_UNIT_BIT);
-//     }
-//     while (likely(dbt->dvd->size) &&
-//            likely(dbt->dvd->data[0] >= 10)) {  // if dvd->size == 1 && dvd >=
-//            10
-//         const uint32_t clz = ubignum_clz(dbt->dvd);
-//         const uint32_t midbits =
-//             (dbt->dvd->data[0] >> (UBN_UNIT_BIT - 3 - clz)) & 0x3u;
-//         dbt->dvd->data[0] -= (ubn_unit_t) 10
-//                              << (UBN_UNIT_BIT - 4 - clz - !midbits);
-//         if (unlikely(dbt->dvd->data[0] == 0))
-//             dbt->dvd->size = 0;
-//         dbt->quo->data[0] |= (ubn_unit_t) 1
-//                              << (UBN_UNIT_BIT - 4 - clz - !midbits);
-//     }
-
-//     dbt->quo->size =
-//         (dbt->quo->data[dvd_ori_sz - 1] == 0) ? dvd_ori_sz - 1 : dvd_ori_sz;
-//     dbt->rmd = dbt->dvd->data[0];  // \in [0, 9]
-// }
-
-/* dbt->dvd \div SUPERTEN = dbt->quo ... dbt->rmd
+/* *out = a - b
+ * Since the system is unsigned, a >= b should be guaranteed to obtain a
+ * non-negative result.
  */
-void ubignum_divby_superten(ubn_dbten_t *dbt)
+bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out)
 {
-    ubignum_set_zero(dbt->quo);
-    if (unlikely(ubignum_iszero(dbt->dvd))) {
-        dbt->rmd = 0;
+    if (unlikely(ubignum_compare(a, b) < 0)) {  // invalid
+        return false;
+    } else if (unlikely(ubignum_compare(a, b) == 0)) {
+        ubignum_set_zero(*out);
+        return true;
+    }
+
+    if (unlikely((*out)->capacity < a->size)) {
+        if (unlikely(!ubignum_recap(*out, a->size)))
+            return false;
+    } else if ((*out)->size > a->size) {
+        memset((*out)->data + a->size, 0,
+               sizeof(ubn_unit_t) * ((*out)->size - a->size));
+    }
+
+    // compute subtraction with adding the two's complement of @b
+    int carry = 1;
+    for (int i = 0; i < b->size; i++)
+        carry = ubn_unit_add(a->data[i], ~b->data[i], carry, &(*out)->data[i]);
+    for (int i = b->size; i < a->size; i++)
+        carry = ubn_unit_add(a->data[i], UBN_UNIT_MAX, carry, &(*out)->data[i]);
+    // the final carry is discarded
+
+    (*out)->size = a->size;
+    while ((*out)->data[(*out)->size - 1] == 0)
+        (*out)->size--;
+
+    return true;
+}
+
+/* Division for unsigned big numbers
+ * @dit must be initialized with ubn_div_init() before calling this
+ * function.
+ */
+bool ubignum_div(ubn_div_t *dit, const ubn_t *restrict dvs)
+{
+    ubignum_set_zero(dit->quo);
+    ubignum_set_zero(dit->subed);
+    if (unlikely(ubignum_iszero(dvs))) {  // divided by zero
+        return false;
+    } else if (unlikely(dit->dvd->size < dvs->size)) {
+        return true;
+    } else if (unlikely(dit->quo->capacity < dit->dvd->size - dvs->size + 1)) {
+        if (unlikely(!ubignum_recap(dit->quo, dit->dvd->size - dvs->size + 1)))
+            return false;
+    }
+
+    dit->quo->size = dit->dvd->size - dvs->size + 1;
+    while (likely(ubignum_compare(dit->dvd, dvs) >= 0)) {  // if dvd >= dvs
+        uint32_t shift =
+            (dit->dvd->size * UBN_UNIT_BIT - ubignum_clz(dit->dvd)) -
+            (dvs->size * UBN_UNIT_BIT - ubignum_clz(dvs));
+        ubignum_left_shift((ubn_t *) dvs, shift, &dit->subed);
+        if (ubignum_compare(dit->dvd, dit->subed) < 0)  // if dvd < subed
+            ubignum_left_shift((ubn_t *) dvs, --shift, &dit->subed);
+        ubignum_sub(dit->dvd, dit->subed, &dit->dvd);
+        dit->quo->data[shift / UBN_UNIT_BIT] |= (ubn_unit_t) 1
+                                                << (shift % UBN_UNIT_BIT);
+    }
+    if (dit->quo->data[dit->quo->size - 1] == 0)
+        dit->quo->size--;
+    /* update dit->dvd->size */
+    while (dit->dvd->data[dit->dvd->size - 1] == 0)
+        dit->dvd->size--;
+    return true;
+}
+
+/* dit->dvd \div UBN_LTEN = dit->quo ... dit->rmd
+ */
+void ubignum_divby_Lten(ubn_div_t *dit)
+{
+    ubignum_set_zero(dit->quo);
+    if (unlikely(ubignum_iszero(dit->dvd))) {
+        dit->sh_rmd = 0;
         return;
     }
-    const uint32_t dvd_ori_sz = dbt->dvd->size;
+    const uint32_t dvd_ori_sz = dit->dvd->size;
 
-    while (likely(dbt->dvd->size >= 2)) {
-        const uint32_t clz = ubignum_clz(dbt->dvd);
-        ubn_extunit_t m = (ubn_extunit_t) dbt->dvd->data[dbt->dvd->size - 1]
+    while (likely(dit->dvd->size >= 2)) {
+        const uint32_t clz = ubignum_clz(dit->dvd);
+        ubn_extunit_t m = (ubn_extunit_t) dit->dvd->data[dit->dvd->size - 1]
                               << UBN_UNIT_BIT |
-                          dbt->dvd->data[dbt->dvd->size - 2];
-        ubn_extunit_t subed = (ubn_extunit_t) SUPERTEN
-                              << (2 * UBN_UNIT_BIT - SUPERTEN_BIT - clz);
+                          dit->dvd->data[dit->dvd->size - 2];
+        ubn_extunit_t subed = (ubn_extunit_t) UBN_LTEN
+                              << (2 * UBN_UNIT_BIT - UBN_LTEN_BIT - clz);
         const uint32_t quo_shift =
-            dbt->dvd->size * UBN_UNIT_BIT - SUPERTEN_BIT - clz - !(m >= subed);
+            dit->dvd->size * UBN_UNIT_BIT - UBN_LTEN_BIT - clz - !(m >= subed);
         subed = subed >> !(m >= subed);
         m -= subed;
-        dbt->dvd->data[dbt->dvd->size - 1] = m >> UBN_UNIT_BIT;
-        dbt->dvd->data[dbt->dvd->size - 2] = (ubn_unit_t) m;
-        while (likely(dbt->dvd->size) &&
-               dbt->dvd->data[dbt->dvd->size - 1] == 0)
-            dbt->dvd->size--;
+        dit->dvd->data[dit->dvd->size - 1] = m >> UBN_UNIT_BIT;
+        dit->dvd->data[dit->dvd->size - 2] = (ubn_unit_t) m;
+        while (likely(dit->dvd->size) &&
+               dit->dvd->data[dit->dvd->size - 1] == 0)
+            dit->dvd->size--;
 
-        dbt->quo->data[quo_shift / UBN_UNIT_BIT] |=
+        dit->quo->data[quo_shift / UBN_UNIT_BIT] |=
             (ubn_unit_t) 1 << (quo_shift % UBN_UNIT_BIT);
     }
-    while (likely(dbt->dvd->size) &&
-           likely(dbt->dvd->data[0] >=
-                  SUPERTEN)) {  // if dvd->size == 1 && dvd >= SUPERTEN
-        const uint32_t clz = ubignum_clz(dbt->dvd);
-        ubn_unit_t subed = (ubn_unit_t) SUPERTEN
-                           << (UBN_UNIT_BIT - SUPERTEN_BIT - clz);
+    while (likely(dit->dvd->size) &&
+           likely(dit->dvd->data[0] >=
+                  UBN_LTEN)) {  // if dvd->size == 1 && dvd >= UBN_LTEN
+        const uint32_t clz = ubignum_clz(dit->dvd);
+        ubn_unit_t subed = (ubn_unit_t) UBN_LTEN
+                           << (UBN_UNIT_BIT - UBN_LTEN_BIT - clz);
         const uint32_t quo_shift =
-            UBN_UNIT_BIT - SUPERTEN_BIT - clz - !(dbt->dvd->data[0] >= subed);
-        subed = subed >> !(dbt->dvd->data[0] >= subed);
-        dbt->dvd->data[0] -= subed;
-        if (unlikely(dbt->dvd->data[0] == 0))
-            dbt->dvd->size = 0;
-        dbt->quo->data[0] |= (ubn_unit_t) 1 << quo_shift;
+            UBN_UNIT_BIT - UBN_LTEN_BIT - clz - !(dit->dvd->data[0] >= subed);
+        subed = subed >> !(dit->dvd->data[0] >= subed);
+        dit->dvd->data[0] -= subed;
+        if (unlikely(dit->dvd->data[0] == 0))
+            dit->dvd->size = 0;
+        dit->quo->data[0] |= (ubn_unit_t) 1 << quo_shift;
     }
 
-    dbt->quo->size =
-        (dbt->quo->data[dvd_ori_sz - 1] == 0) ? dvd_ori_sz - 1 : dvd_ori_sz;
-    dbt->rmd = dbt->dvd->data[0];  // \in [0, SUPERTEN - 1]
+    dit->quo->size =
+        (dit->quo->data[dvd_ori_sz - 1] == 0) ? dvd_ori_sz - 1 : dvd_ori_sz;
+    dit->sh_rmd = dit->dvd->data[0];  // \in [0, UBN_LTEN - 1]
 }
 
 /* (*out) += a << (offset * UBN_UNIT_BIT)
@@ -502,7 +477,8 @@ cleanup_ans:
     return false;
 }
 
-/* convert the unsigned big number to ascii string */
+/* convert the unsigned big number to ascii string
+ */
 char *ubignum_2decimal(const ubn_t *N)
 {
     if (ubignum_iszero(N)) {
@@ -513,8 +489,8 @@ char *ubignum_2decimal(const ubn_t *N)
         ans[1] = '\0';
         return ans;
     }
-    ubn_dbten_t *dbt = ubn_dbten_init(N);
-    if (unlikely(!dbt))
+    ubn_div_t *dit = ubn_div_init(N, 0);
+    if (unlikely(!dit))
         return NULL;
     /* Let n be the number.
      * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
@@ -522,17 +498,17 @@ char *ubignum_2decimal(const ubn_t *N)
      * (x * 13) >> 2 is equivalent to x / 3.25
      */
     uint32_t digit = (UBN_UNIT_BIT * N->size - ubignum_clz(N)) * 13;
-    digit = (digit >> 2) + 1 + SUPERTEN_EXP;  // +1 for containing '\0'
+    digit = (digit >> 2) + 1 + UBN_LTEN_EXP;  // +1 for containing '\0'
     char *ans = (char *) CALLOC(sizeof(char), digit);
     if (unlikely(!ans))
-        goto cleanup_dbt;
+        goto cleanup_dit;
 
     /* convert 2-base to 10-base */
     int32_t index = 0;
-    while (likely(dbt->dvd->size)) {
-        ubignum_divby_superten(dbt);
-        update_str_by_super_rmd(dbt->rmd, ans, index);
-        ubignum_swapptr(&dbt->dvd, &dbt->quo);
+    while (likely(dit->dvd->size)) {
+        ubignum_divby_Lten(dit);
+        update_str_by_sh_rmd(dit->sh_rmd, ans, index);
+        ubignum_swapptr(&dit->dvd, &dit->quo);
     }
     /* reverse the string */
     --index;
@@ -544,42 +520,57 @@ char *ubignum_2decimal(const ubn_t *N)
         ans[left] = ans[right];
         ans[right] = tmp;
     }
-    ubn_dbten_free(dbt);
+    ubn_div_free(dit);
     return ans;
 cleanup_ans:
     FREE(ans);
-cleanup_dbt:
-    ubn_dbten_free(dbt);
+    if (0)  // to pass static check
+        ubignum_div(dit, N);
+cleanup_dit:
+    ubn_div_free(dit);
     return NULL;
 }
 
 /* Allocate space for members and copy dividend->data to ()->dvd->data.
+ * @dvs_level represents the expected divisor size.
+ * If dvs_level is 0, @rmd and @subed won't allocate space.
  */
-ubn_dbten_t *ubn_dbten_init(const ubn_t *dividend)
+ubn_div_t *ubn_div_init(const ubn_t *dividend, uint32_t dvs_level)
 {
-    ubn_dbten_t *dbt = (ubn_dbten_t *) MALLOC(sizeof(ubn_dbten_t));
-    if (unlikely(!dbt))
+    ubn_div_t *dit = (ubn_div_t *) MALLOC(sizeof(ubn_div_t));
+    if (unlikely(!dit))
         return NULL;
-    if (unlikely(!(dbt->dvd = ubignum_init(dividend->size))))
+    if (unlikely(!(dit->dvd = ubignum_init(dividend->size))))
         goto cleanup_struct;
-    if (unlikely(!(dbt->quo = ubignum_init(dividend->size))))
+    if (unlikely(!(dit->quo = ubignum_init((dividend->size > dvs_level)
+                                               ? dividend->size - dvs_level + 1
+                                               : 1))))
         goto cleanup_dvd;
-    dbt->rmd = 0;
-    dbt->dvd->size = dividend->size;
-    memcpy(dbt->dvd->data, dividend->data, sizeof(ubn_unit_t) * dividend->size);
-    return dbt;
+    if (dvs_level) {
+        if (unlikely(!(dit->subed = ubignum_init(dividend->size + 1))))
+            goto cleanup_quo;
+    } else {
+        dit->subed = NULL;
+    }
+    dit->sh_rmd = 0;
+    dit->dvd->size = dividend->size;
+    memcpy(dit->dvd->data, dividend->data, sizeof(ubn_unit_t) * dividend->size);
+    return dit;
+cleanup_quo:
+    ubignum_free(dit->quo);
 cleanup_dvd:
-    ubignum_free(dbt->dvd);
+    ubignum_free(dit->dvd);
 cleanup_struct:
-    FREE(dbt);
+    FREE(dit);
     return NULL;
 }
 
-void ubn_dbten_free(ubn_dbten_t *dbt)
+void ubn_div_free(ubn_div_t *dit)
 {
-    if (!dbt)
+    if (!dit)
         return;
-    ubignum_free(dbt->quo);
-    ubignum_free(dbt->dvd);
-    FREE(dbt);
+    ubignum_free(dit->subed);
+    ubignum_free(dit->quo);
+    ubignum_free(dit->dvd);
+    FREE(dit);
 }

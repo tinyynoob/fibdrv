@@ -21,18 +21,18 @@ typedef uint64_t ubn_unit_t;
 typedef __uint128_t ubn_extunit_t;
 #define UBN_UNIT_BIT 64
 #define UBN_UNIT_MAX 0xFFFFFFFFFFFFFFFFu
-#define SUPERTEN 10000000000000000u  // 10 ** 16
-#define SUPERTEN_EXP 16
-#define SUPERTEN_BIT 54
+#define UBN_LTEN 10000000000000000u  // 10 ** 16
+#define UBN_LTEN_EXP 16
+#define UBN_LTEN_BIT 54
 #else
 #define CPU64 0
 typedef uint32_t ubn_unit_t;
 typedef uint64_t ubn_extunit_t;
 #define UBN_UNIT_BIT 32
 #define UBN_UNIT_MAX 0xFFFFFFFFu
-#define SUPERTEN 100000000u  // 10 ** 8
-#define SUPERTEN_EXP 8
-#define SUPERTEN_BIT 27
+#define UBN_LTEN 100000000u  // 10 ** 8
+#define UBN_LTEN_EXP 8
+#define UBN_LTEN_BIT 27
 #endif
 
 #ifndef likely
@@ -73,23 +73,23 @@ typedef uint64_t ubn_extunit_t;
 
 
 #if CPU64
-#define update_str_by_super_rmd(rmd, str, index)                            \
+#define update_str_by_sh_rmd(rmd, str, index)                               \
     do {                                                                    \
-        char s[SUPERTEN_EXP + 1];                                           \
-        if (unlikely(!snprintf(s, SUPERTEN_EXP + 1, "%0*llu", SUPERTEN_EXP, \
+        char s[UBN_LTEN_EXP + 1];                                           \
+        if (unlikely(!snprintf(s, UBN_LTEN_EXP + 1, "%0*llu", UBN_LTEN_EXP, \
                                (unsigned long long) rmd)))                  \
             goto cleanup_##str;                                             \
-        for (int i = SUPERTEN_EXP - 1; i >= 0; i--)                         \
+        for (int i = UBN_LTEN_EXP - 1; i >= 0; i--)                         \
             str[index++] = s[i];                                            \
     } while (0);
 #else
-#define update_str_by_super_rmd(rmd, str, index)                          \
+#define update_str_by_sh_rmd(rmd, str, index)                             \
     do {                                                                  \
-        char s[SUPERTEN_EXP + 1];                                         \
-        if (unlikely(!snprintf(s, SUPERTEN_EXP + 1, "%0*u", SUPERTEN_EXP, \
+        char s[UBN_LTEN_EXP + 1];                                         \
+        if (unlikely(!snprintf(s, UBN_LTEN_EXP + 1, "%0*u", UBN_LTEN_EXP, \
                                (unsigned) rmd)))                          \
             goto cleanup_##str;                                           \
-        for (int i = SUPERTEN_EXP - 1; i >= 0; i--)                       \
+        for (int i = UBN_LTEN_EXP - 1; i >= 0; i--)                       \
             str[index++] = s[i];                                          \
     } while (0);
 #endif

@@ -19,6 +19,25 @@
 #include <stdlib.h>
 #endif
 
+/* unsigned big number
+ * @data: MS:[size-1], LS:[0]
+ * @size: used size in @data divided by sizeof(ubn_unit_t)
+ * @capacity: allocated size of @data
+ */
+typedef struct {
+    ubn_unit_t *data;
+    uint32_t size;
+    uint32_t capacity;
+} ubn_t;
+
+/* The struct that is used for ubignum_div().
+ */
+typedef struct {
+    ubn_t *dvd;         // dividend
+    ubn_t *quo;         // quotient
+    ubn_t *subed;       // subtrahend
+    ubn_unit_t sh_rmd;  // remainder, for special use
+} ubn_div_t;
 
 #ifndef MAX
 #define MAX(a, b)          \
@@ -38,26 +57,6 @@
     })
 #endif
 
-/* unsigned big number
- * @data: MS:[size-1], LS:[0]
- * @size: used size in @data divided by sizeof(ubn_unit_t)
- * @capacity: allocated size of @data
- */
-typedef struct {
-    ubn_unit_t *data;
-    uint32_t size;
-    uint32_t capacity;
-} ubn_t;
-
-/* The struct that is used for ubignum_divby_ten().
- * dvd \div 10 = quo ... rmd
- */
-typedef struct {
-    ubn_t *dvd;      // dividend
-    ubn_t *quo;      // quotient
-    ubn_unit_t rmd;  // store remainder
-} ubn_dbten_t;
-
 ubn_t *ubignum_init(uint32_t capacity);
 bool ubignum_recap(ubn_t *N, uint32_t new_capacity);
 void ubignum_free(ubn_t *N);
@@ -69,18 +68,18 @@ static inline int ubn_unit_add(ubn_unit_t a,
 static inline bool ubignum_iszero(const ubn_t *N);
 void ubignum_set_zero(ubn_t *N);
 void ubignum_set_u64(ubn_t *N, const uint64_t n);
-// int ubignum_compare(const ubn_t *a, const ubn_t *b);
+int ubignum_compare(const ubn_t *a, const ubn_t *b);
 bool ubignum_left_shift(ubn_t *a, uint32_t d, ubn_t **out);
 bool ubignum_add(ubn_t *a, ubn_t *b, ubn_t **out);
-// bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out);
+bool ubignum_sub(ubn_t *a, ubn_t *b, ubn_t **out);
 bool ubignum_mult(ubn_t *a, ubn_t *b, ubn_t **out);
 bool ubignum_square(ubn_t *a, ubn_t **out);
 char *ubignum_2decimal(const ubn_t *N);
-// void ubignum_divby_ten(ubn_dbten_t *dbt);
-void ubignum_divby_superten(ubn_dbten_t *dbt);
+bool ubignum_div(ubn_div_t *dit, const ubn_t *restrict dvs);
+void ubignum_divby_superten(ubn_div_t *dit);
 
-ubn_dbten_t *ubn_dbten_init(const ubn_t *dividend);
-void ubn_dbten_free(ubn_dbten_t *dbt);
+ubn_div_t *ubn_div_init(const ubn_t *dividend, uint32_t dvs_level);
+void ubn_div_free(ubn_div_t *dbt);
 
 
 

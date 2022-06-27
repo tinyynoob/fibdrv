@@ -9,7 +9,7 @@
 
 int main()
 {
-    const int offset = 100000;
+    const int offset = 10000;
     char buf[210000];
     // char write_buf[] = "testing writing";
 
@@ -19,24 +19,24 @@ int main()
         exit(1);
     }
 
-    // for (int i = 0; i <= offset; i++) {
-    //     lseek(fd, i, SEEK_SET);
-    //     long long t = write(fd, buf, 0);  // fib sequence
-    //     printf("Writing to " FIB_DEV
-    //            " at offset %d, returned the time %lld (ns)\n",
-    //            i, t);
-    // }
-
     for (int i = offset; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
-        long long sz = read(fd, buf, sizeof(buf) / sizeof(char));
-        if (!sz)
-            break;
-        printf("Reading from " FIB_DEV
-               " at offset %d, returned the sequence "
-               "%s.\n",
-               i, buf);
+        long long t = write(fd, buf, 1);
+        printf("Writing to " FIB_DEV
+               " at offset %d, returned the time %lld (ns)\n",
+               i, t);
     }
+
+    // for (int i = offset; i <= offset; i++) {
+    //     lseek(fd, i, SEEK_SET);
+    //     long long sz = read(fd, buf, sizeof(buf) / sizeof(char));
+    //     if (!sz)
+    //         break;
+    //     printf("Reading from " FIB_DEV
+    //            " at offset %d, returned the sequence "
+    //            "%s.\n",
+    //            i, buf);
+    // }
 
     close(fd);
     return 0;
