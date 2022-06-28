@@ -8,6 +8,7 @@
 #if KSPACE
 #include <linux/compiler.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #else
@@ -38,6 +39,7 @@ typedef struct {
     ubn_t *subed;       // subtrahend
     ubn_unit_t sh_rmd;  // remainder, for special use
 } ubn_div_t;
+
 
 #ifndef MAX
 #define MAX(a, b)          \
@@ -76,7 +78,7 @@ bool ubignum_mult(ubn_t *a, ubn_t *b, ubn_t **out);
 bool ubignum_square(ubn_t *a, ubn_t **out);
 char *ubignum_2decimal(const ubn_t *N);
 bool ubignum_div(ubn_div_t *dit, const ubn_t *restrict dvs);
-void ubignum_divby_superten(ubn_div_t *dit);
+void ubignum_divby_Lten(ubn_div_t *const dit);
 
 ubn_div_t *ubn_div_init(const ubn_t *dividend, uint32_t dvs_level);
 void ubn_div_free(ubn_div_t *dbt);

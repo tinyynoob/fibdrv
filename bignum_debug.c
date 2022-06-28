@@ -5,8 +5,8 @@
 #include "ubignum.h"
 
 #define FIBSE 0
-#define FAST 0
-#define COMPARE 1
+#define FAST 1
+#define COMPARE 0
 
 static inline void ubignum_show(const ubn_t *N)
 {
@@ -20,7 +20,7 @@ static ubn_t *fib_fast(uint32_t k);
 
 int main()
 {
-    const int target = 200;
+    const int target = 1000000;
 #if FIBSE
     ubn_t *fib[2] = {NULL, NULL};
     fib[0] = ubignum_init(UBN_DEFAULT_CAPACITY);
@@ -37,7 +37,7 @@ int main()
 #endif
 
 #if FAST
-    for (int i = 0; i <= target; i++) {
+    for (int i = target; i <= target; i++) {
         ubn_t *v = fib_fast(i);
         printf("%d is\t", i);
         ubignum_show(v);
@@ -58,11 +58,11 @@ int main()
         ubignum_free(f);
     }
 #endif
-    const int n = 1000000;
-    ubn_t *b = fib_fast(n);
-    printf("fib(%d) uses %u chunks.\n", n, b->size);
-    ubignum_show(b);
-    ubignum_free(b);
+    // const int n = 1000000;
+    // ubn_t *b = fib_fast(n);
+    // printf("fib(%d) uses %u chunks.\n", n, b->size);
+    // ubignum_show(b);
+    // ubignum_free(b);
 
     // ubn_t *a = ubignum_init(UBN_DEFAULT_CAPACITY);
     // ubignum_set_u64(a, SUPERTEN);

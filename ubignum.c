@@ -4,6 +4,7 @@
 #if KSPACE
 #include <linux/compiler.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/string.h>  // memset, memcpy, memmove
 #include <linux/types.h>
@@ -13,8 +14,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>  // memset, memcpy, memmove
+#include "list.h"
 #endif
 
+typedef struct {
+    ubn_div_t *dit;
+    char str[UBN_SUPERTEN_EXP + 1];
+    struct list_head list;
+} ubn_2dec_l2_t;
+
+static char *ubignum_2decimal_large(const ubn_t *N);
+static char *ubignum_2decimal_medium(const ubn_t *N);
+static void ubignum_2decimal_l1(ubn_div_t *const dit, char *const str);
+static void ubignum_2decimal_l2(ubn_2dec_l2_t *const node);
 static inline int ubignum_clz(const ubn_t *N);
 static void ubignum_mult_add(const ubn_t *restrict a,
                              uint32_t offset,
@@ -288,9 +300,9 @@ bool ubignum_div(ubn_div_t *dit, const ubn_t *restrict dvs)
     return true;
 }
 
-/* dit->dvd \div UBN_LTEN = dit->quo ... dit->rmd
+/* dit->dvd \div UBN_LTEN = dit->quo ... dit->sh_rmd
  */
-void ubignum_divby_Lten(ubn_div_t *dit)
+void ubignum_divby_Lten(ubn_div_t *const dit)
 {
     ubignum_set_zero(dit->quo);
     if (unlikely(ubignum_iszero(dit->dvd))) {
@@ -482,53 +494,169 @@ cleanup_ans:
 char *ubignum_2decimal(const ubn_t *N)
 {
     if (ubignum_iszero(N)) {
-        char *ans = (char *) CALLOC(sizeof(char), 2);
+        char *ans = (char *) MALLOC(sizeof(char) * 2);
         if (unlikely(!ans))
             return NULL;
         ans[0] = '0';
         ans[1] = '\0';
         return ans;
+    } else if (N->size == 1) {
+#if CPU64
+        char *ans = (char *) MALLOC(sizeof(char) * (20 + 1));
+#else
+        char *ans = (char *) MALLOC(sizeof(char) * (10 + 1));
+#endif
+        if (unlikely(!ans))
+            return NULL;
+#if CPU64
+        snprintf(ans, 20 + 1, "%llu", (unsigned long long) N->data[0]);
+#else
+        snprintf(ans, 10 + 1, "%u", (unsigned) N->data[0]);
+#endif
+        return ans;
     }
-    ubn_div_t *dit = ubn_div_init(N, 0);
-    if (unlikely(!dit))
-        return NULL;
-    /* Let n be the number.
+
+    const uint32_t threshold = UBN_SUPERTEN_CHUNK * 2;
+    if (N->size >= threshold)
+        return ubignum_2decimal_large(N);
+    return ubignum_2decimal_medium(N);
+}
+
+static char *ubignum_2decimal_large(const ubn_t *N)
+{
+    ubn_div_t *dit = ubn_div_init(N, (uint32_t) UBN_SUPERTEN_CHUNK);
+    /* obtain SUPERTEN from LTEN */
+    ubn_t *super_ten = ubignum_init(1);
+    ubignum_set_u64(super_ten, UBN_LTEN);
+    for (uint32_t e = UBN_LTEN_EXP; e < UBN_SUPERTEN_EXP; e <<= 1)
+        ubignum_square(super_ten, &super_ten);
+    /* divided by super_ten, which is 10 ** 1024 */
+    struct list_head *h = (struct list_head *) MALLOC(sizeof(struct list_head));
+    INIT_LIST_HEAD(h);
+    uint32_t list_len = 0;
+    do {
+        ubignum_div(dit, super_ten);
+        ubn_2dec_l2_t *l2node = (ubn_2dec_l2_t *) MALLOC(sizeof(ubn_2dec_l2_t));
+        l2node->dit = ubn_div_init(dit->dvd, 0);  // assigns remainder
+        l2node->str[UBN_SUPERTEN_EXP] = '\0';
+        list_add(&l2node->list, h);
+        list_len++;
+        ubignum_swapptr(&dit->dvd, &dit->quo);
+    } while (likely(!ubignum_iszero(dit->dvd)));
+    ubn_div_free(dit);
+    dit = NULL;
+    ubignum_free(super_ten);
+    super_ten = NULL;
+    char *ans =
+        (char *) MALLOC(sizeof(char) * (list_len * UBN_SUPERTEN_EXP + 1));
+    struct list_head *it;
+    uint32_t index = 0;
+    bool start = false;
+    list_for_each (it, h) {
+        ubn_2dec_l2_t *const l2node = list_entry(it, ubn_2dec_l2_t, list);
+        ubignum_2decimal_l2(l2node);
+        ubn_div_free(l2node->dit);
+        l2node->dit = NULL;
+        if (unlikely(!start)) {
+            uint32_t stridx = 0;
+            while (stridx < UBN_SUPERTEN_EXP &&
+                   likely(l2node->str[stridx] == '0'))
+                stridx++;
+            // stridx achieves end or stridx != '0'
+            if (l2node->str[stridx] != '\0') {
+                start = true;
+                memcpy(ans, l2node->str + stridx,
+                       sizeof(char) * (UBN_SUPERTEN_EXP - stridx));
+                index += UBN_SUPERTEN_EXP - stridx;
+            }
+        } else {
+            memcpy(ans + index, l2node->str, sizeof(char) * UBN_SUPERTEN_EXP);
+            index += UBN_SUPERTEN_EXP;
+        }
+    }
+    ans[index] = '\0';
+    while (!list_empty(h)) {
+        ubn_2dec_l2_t *l2node = list_entry(h->next, ubn_2dec_l2_t, list);
+        FREE(l2node);
+        list_del(h->next);
+    }
+    FREE(h);
+    h = NULL;
+    return ans;
+    // TODO: aloc fail handle
+}
+
+static char *ubignum_2decimal_medium(const ubn_t *N)
+{
+    /* Estimate the digit needed.
+     * Let n be the number.
      * digit = 1 + log_10(n) = 1 + \frac{log_2(n)}{log_2(10)}
      * log_2(10) \approx 3.3219, we may choose 3.25
      * (x * 13) >> 2 is equivalent to x / 3.25
      */
-    uint32_t digit = (UBN_UNIT_BIT * N->size - ubignum_clz(N)) * 13;
-    digit = (digit >> 2) + 1 + UBN_LTEN_EXP;  // +1 for containing '\0'
-    char *ans = (char *) CALLOC(sizeof(char), digit);
-    if (unlikely(!ans))
-        goto cleanup_dit;
-
+    uint64_t digit = (UBN_UNIT_BIT * N->size - ubignum_clz(N)) * 13;
+    digit = (digit >> 2) + 1;  // +1 for containing '\0'
+    ubn_div_t *dit = ubn_div_init(N, 0);
+    char *str = (char *) MALLOC(sizeof(char) * (digit + UBN_LTEN_EXP));
     /* convert 2-base to 10-base */
-    int32_t index = 0;
-    while (likely(dit->dvd->size)) {
-        ubignum_divby_Lten(dit);
-        update_str_by_sh_rmd(dit->sh_rmd, ans, index);
-        ubignum_swapptr(&dit->dvd, &dit->quo);
+    uint32_t stridx = 0;
+    while (likely(!ubignum_iszero(dit->dvd))) {
+        ubignum_2decimal_l1(dit, str + stridx);
+        stridx += UBN_LTEN_EXP;
     }
-    /* reverse the string */
-    --index;
-    while (ans[index] == '0')
+    str[stridx] = '\0';
+    char *ans = (char *) MALLOC(sizeof(char) * (stridx + 1));
+    stridx -= UBN_LTEN_EXP;
+    uint32_t index = UBN_LTEN_EXP;
+    while (likely(str[stridx] == '0')) {
+        stridx++;
         index--;
-    ans[index + 1] = '\0';
-    for (int32_t left = 0, right = index; left < right; left++, right--) {
-        char tmp = ans[left];
-        ans[left] = ans[right];
-        ans[right] = tmp;
     }
+    memcpy(ans, str + stridx, sizeof(char) * index);
+    stridx += index - UBN_LTEN_EXP - UBN_LTEN_EXP;
+    while (stridx) {
+        memcpy(ans + index, str + stridx, sizeof(char) * UBN_LTEN_EXP);
+        index += UBN_LTEN_EXP;
+        stridx -= UBN_LTEN_EXP;
+    }
+    memcpy(ans + index, str + stridx, sizeof(char) * UBN_LTEN_EXP);
+    index += UBN_LTEN_EXP;
+    ans[index] = '\0';
+    FREE(str);
     ubn_div_free(dit);
+    dit = NULL;
     return ans;
-cleanup_ans:
-    FREE(ans);
-    if (0)  // to pass static check
-        ubignum_div(dit, N);
-cleanup_dit:
-    ubn_div_free(dit);
-    return NULL;
+    // TODO: aloc fail handle
+}
+
+/* no allocation
+ * dit->dvd = dit->dvd / UBN_LTEN
+ * copy the string format of (dit->dvd % UBN_LTEN) to str without '\0'
+ */
+static void ubignum_2decimal_l1(ubn_div_t *const dit, char *const str)
+{
+    char s[UBN_LTEN_EXP + 1];
+    ubignum_divby_Lten(dit);
+#if CPU64
+    snprintf(s, UBN_LTEN_EXP + 1, "%0*llu", UBN_LTEN_EXP,
+             (unsigned long long) dit->sh_rmd);
+#else
+    snprintf(s, UBN_LTEN_EXP + 1, "%0*u", UBN_LTEN_EXP, (unsigned) rmd);
+#endif
+    memcpy(str, s, sizeof(char) * UBN_LTEN_EXP);
+    ubignum_swapptr(&dit->dvd, &dit->quo);
+}
+
+static void ubignum_2decimal_l2(ubn_2dec_l2_t *const node)
+{
+    uint16_t str_offset = UBN_SUPERTEN_EXP - UBN_LTEN_EXP;
+    while (likely(!ubignum_iszero(node->dit->dvd))) {
+        ubignum_2decimal_l1(node->dit, node->str + str_offset);
+        str_offset -= UBN_LTEN_EXP;
+    }
+    str_offset += UBN_LTEN_EXP;
+    if (unlikely(str_offset))
+        memset(node->str, '0', sizeof(char) * str_offset);  // pad '0'
 }
 
 /* Allocate space for members and copy dividend->data to ()->dvd->data.

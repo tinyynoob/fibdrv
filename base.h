@@ -35,6 +35,17 @@ typedef uint64_t ubn_extunit_t;
 #define UBN_LTEN_BIT 27
 #endif
 
+#define UBN_SUPERTEN_EXP 1024
+#define UBN_ULTRATEN_EXP 65536
+
+#if CPU64
+#define UBN_SUPERTEN_CHUNK 54
+#define UBN_ULTRATEN_CHUNK 3402
+#else
+#define UBN_SUPERTEN_CHUNK
+#define UBN_ULTRATEN_CHUNK
+#endif
+
 #ifndef likely
 #define likely(expr) __builtin_expect(expr, 1)
 #endif
@@ -69,29 +80,6 @@ typedef uint64_t ubn_extunit_t;
         __asm__("mull %3" : "=a"(lo), "=d"(hi) : "a"(a), "rm"(b)); \
     } while (0);
 #endif
-#endif
-
-
-#if CPU64
-#define update_str_by_sh_rmd(rmd, str, index)                               \
-    do {                                                                    \
-        char s[UBN_LTEN_EXP + 1];                                           \
-        if (unlikely(!snprintf(s, UBN_LTEN_EXP + 1, "%0*llu", UBN_LTEN_EXP, \
-                               (unsigned long long) rmd)))                  \
-            goto cleanup_##str;                                             \
-        for (int i = UBN_LTEN_EXP - 1; i >= 0; i--)                         \
-            str[index++] = s[i];                                            \
-    } while (0);
-#else
-#define update_str_by_sh_rmd(rmd, str, index)                             \
-    do {                                                                  \
-        char s[UBN_LTEN_EXP + 1];                                         \
-        if (unlikely(!snprintf(s, UBN_LTEN_EXP + 1, "%0*u", UBN_LTEN_EXP, \
-                               (unsigned) rmd)))                          \
-            goto cleanup_##str;                                           \
-        for (int i = UBN_LTEN_EXP - 1; i >= 0; i--)                       \
-            str[index++] = s[i];                                          \
-    } while (0);
 #endif
 
 
